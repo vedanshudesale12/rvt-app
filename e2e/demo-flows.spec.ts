@@ -34,7 +34,7 @@ async function login(page: Page, email: string) {
 
 async function logout(page: Page) {
   await page.getByRole("button", { name: "Log out" }).click();
-  await page.waitForURL(/\/login/);
+  await page.waitForURL(/\/login/, { waitUntil: "commit" });
 }
 
 async function pickFriday(page: Page) {

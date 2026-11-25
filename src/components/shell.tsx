@@ -142,8 +142,7 @@ export function Shell({
               setLeaving(true);
               try {
                 await api("/api/auth/logout");
-                router.push("/login");
-                router.refresh();
+                window.location.assign("/login");
               } catch (err) {
                 setLeaving(false);
                 setLeaveError(err instanceof Error ? err.message : "Could not log out. Try again.");
