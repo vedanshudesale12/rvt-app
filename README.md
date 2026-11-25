@@ -174,4 +174,4 @@ npm run build
 
 ## Logo
 
-The mark is `public/brand/rvt-mark.svg`. The lockup is `public/brand/rvt-logo.svg`. `npm run icons` writes the PWA and favicon PNGs from the mark. If you have the official PNG artwork, replace those two files (keep the paths) and run `npm run icons` again.
+The full lockup is `public/brand/rvt-logo.png` (login, signup, door, email). The RVT mark is `public/brand/rvt-mark.png` and `public/brand/rvt-mark.svg` (sidebar). `npm run icons` writes the favicon and PWA icons from the mark.

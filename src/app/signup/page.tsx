@@ -55,7 +55,7 @@ export default function SignupPage() {
           }
         }}
       >
-        <Logo className="h-14 w-14" />
+        <Logo lockup className="mb-2 h-auto w-56" />
         <h1 className="display text-4xl">Join {APP.name}</h1>
         <p className="text-sm text-muted">PRs are active straight away. Ticketing and collab partners wait for an admin. You must be 18+.</p>
         <input name="fullName" required placeholder="Name" className="border border-line bg-panel px-3 py-2" />

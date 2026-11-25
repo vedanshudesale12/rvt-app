@@ -20,7 +20,7 @@ export async function sendEventEmail(to: string, event: EventRow): Promise<void>
   }).format(new Date(event.startsAt));
   const html = `
     <div style="background:#0a0a0a;padding:24px;font-family:Arial,sans-serif;color:#f4f4f1">
-      <img src="${origin}/brand/icon-192.png" alt="${APP.org}" width="64" height="64" />
+      <img src="${origin}/brand/rvt-logo.png" alt="${APP.org}" width="240" />
       <p style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#4B1494">${APP.name}</p>
       <h1 style="font-size:28px;margin:8px 0">${event.name}</h1>
       <p>${when}<br/>${event.venue}</p>

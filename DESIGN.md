@@ -26,4 +26,4 @@ Mobile first. PRs and door staff use phones. The door screen is a search box and
 
 ## Logo
 
-`public/brand/rvt-mark.svg` is the small mark (sidebar, door, favicon, PWA, email). `public/brand/rvt-logo.svg` is the wide lockup (login). Drop the official PNGs in those slots and run `npm run icons` if you replace the mark.
+`public/brand/rvt-logo.png` is the full lockup (login, signup, door, email). `public/brand/rvt-mark.png` is the RVT mark (sidebar, favicon, PWA). The logo file may contain its own purple gradient. The interface around it stays flat. `npm run icons` rebuilds the small icons from the mark.

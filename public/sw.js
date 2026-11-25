@@ -1,5 +1,5 @@
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open("backstage-static").then((cache) => cache.addAll(["/brand/rvt-mark.svg", "/brand/rvt-logo.svg"])));
+  event.waitUntil(caches.open("backstage-static").then((cache) => cache.addAll(["/brand/rvt-mark.png", "/brand/rvt-logo.png"])));
   self.skipWaiting();
 });
 
