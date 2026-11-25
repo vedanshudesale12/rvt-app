@@ -24,7 +24,7 @@ export default async function LedgerPage() {
           <li key={row.id} className="flex items-center justify-between gap-3 px-3 py-3">
             <span>
               <span className="font-medium">{row.category}</span>
-              <span className="mt-1 block text-sm text-muted">{row.description}</span>
+              {row.description ? <span className="mt-1 block text-sm text-muted">{row.description}</span> : null}
             </span>
             <span className="flex items-center gap-3">
               <span className="num text-2xl">{inr(row.amountPaise)}</span>

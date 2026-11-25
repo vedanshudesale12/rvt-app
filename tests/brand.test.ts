@@ -5,7 +5,7 @@ import { APP } from "@/config/brand";
 
 function files(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry === ".next" || entry === ".git") continue;
+    if (entry === "node_modules" || entry === ".next" || entry === ".git" || entry === "test-results" || entry === "playwright-report" || entry === "coverage") continue;
     const full = path.join(dir, entry);
     if (statSync(full).isDirectory()) files(full, found);
     else if (/\.(ts|tsx|js|mjs|md|css|json|html)$/.test(entry)) found.push(full);

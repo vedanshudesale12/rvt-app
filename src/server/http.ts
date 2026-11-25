@@ -15,6 +15,18 @@ export async function readJson(request: Request): Promise<unknown> {
   }
 }
 
+const DEV_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|::1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/;
+
+function hostnameOf(host: string): string {
+  return host.replace(/:\d+$/, "");
+}
+
+/** In dev, localhost and a LAN address (for example 192.168.1.5) are the same app. */
+export function devHostsCompatible(originHost: string, requestHost: string): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return DEV_HOST.test(hostnameOf(originHost)) && DEV_HOST.test(hostnameOf(requestHost));
+}
+
 export function assertCsrf(request: Request): void {
   const header = request.headers.get("x-csrf-token") ?? "";
   const cookie = readCookie(request, "rvt_csrf") ?? "";
@@ -23,8 +35,11 @@ export function assertCsrf(request: Request): void {
   }
   const origin = request.headers.get("origin");
   const host = request.headers.get("host");
-  if (origin && host && new URL(origin).host !== host) {
-    throw new AppError(403, "That request came from the wrong site");
+  if (origin && host) {
+    const originHost = new URL(origin).host;
+    if (originHost !== host && !devHostsCompatible(originHost, host)) {
+      throw new AppError(403, "That request came from the wrong site");
+    }
   }
 }
 

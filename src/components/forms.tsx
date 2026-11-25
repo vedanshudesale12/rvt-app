@@ -8,7 +8,7 @@ import { api } from "@/components/use-api";
 type Ticket = { id: string; name: string; pricePaise: number };
 type Pr = { id: string; fullName: string };
 
-export function GuestForm({ eventId, tickets, prs, showPr }: { eventId: string; tickets: Ticket[]; prs: Pr[]; showPr: boolean }) {
+export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { eventId: string; tickets: Ticket[]; prs: Pr[]; showPr: boolean; collabName?: string }) {
   const [error, setError] = useState("");
   const [side, setSide] = useState("rvt");
   return (
@@ -36,12 +36,13 @@ export function GuestForm({ eventId, tickets, prs, showPr }: { eventId: string; 
               phone: form.get("phone"),
               ticketTypeId: form.get("ticketTypeId"),
               notes: form.get("notes") || undefined,
-              prId: form.get("prId") || undefined,
-              side,
-              promoterName: form.get("promoterName") || undefined,
-              collectedBy: form.get("collectedBy") || undefined,
-              ticketingPartnerId: form.get("ticketingPartnerId") || undefined,
+              prId: collabName ? undefined : form.get("prId") || undefined,
+              side: collabName ? "collab" : side,
+              promoterName: collabName || form.get("promoterName") || undefined,
+              collectedBy: collabName ? "company" : form.get("collectedBy") || undefined,
+              ticketingPartnerId: collabName ? undefined : form.get("ticketingPartnerId") || undefined,
               proofPath,
+              ageConfirmed: form.get("age") === "on" ? true : undefined,
             },
           });
           window.location.reload();
@@ -59,26 +60,30 @@ export function GuestForm({ eventId, tickets, prs, showPr }: { eventId: string; 
             <option key={ticket.id} value={ticket.id}>{ticket.name}</option>
           ))}
         </select>
-        {showPr && side === "rvt" && (
+        {showPr && !collabName && side === "rvt" && (
           <select name="prId" className="border border-line px-3 py-2" defaultValue={prs[0]?.id}>
             {prs.map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.fullName}</option>
             ))}
           </select>
         )}
-        {showPr && (
+        {showPr && !collabName && (
           <select name="side" className="border border-line px-3 py-2" value={side} onChange={(event) => setSide(event.target.value)}>
             <option value="rvt">RVT</option>
             <option value="collab">Collab promoter</option>
           </select>
         )}
-        {side === "collab" && <input name="promoterName" placeholder="Their promoter" className="border border-line px-3 py-2" />}
-        <select name="collectedBy" className="border border-line px-3 py-2" defaultValue="pr">
+        {!collabName && side === "collab" && <input name="promoterName" placeholder="Their promoter" className="border border-line px-3 py-2" />}
+        {!collabName && <select name="collectedBy" className="border border-line px-3 py-2" defaultValue="pr">
           <option value="pr">PR collected</option>
           <option value="company">Company collected</option>
           <option value="ticketing_partner">Ticketing partner collected</option>
-        </select>
+        </select>}
         <input name="notes" placeholder="Note" className="border border-line px-3 py-2" />
+        <label className="flex items-center gap-2 text-sm md:col-span-2">
+          <input name="age" type="checkbox" required />
+          Guest is 18 or older
+        </label>
         <label className="text-sm text-muted">
           UPI screenshot
           <input name="proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-1 block w-full" />
@@ -108,6 +113,7 @@ export function CompForm({ eventId, tickets, prs, showPr }: { eventId: string; t
               ticketTypeId: form.get("ticketTypeId"),
               notes: form.get("notes") || undefined,
               prId: form.get("prId") || undefined,
+              ageConfirmed: form.get("age") === "on" ? true : undefined,
             },
           });
           window.location.reload();
@@ -124,6 +130,10 @@ export function CompForm({ eventId, tickets, prs, showPr }: { eventId: string; t
         <select name="ticketTypeId" className="border border-line px-3 py-2">{tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.name}</option>)}</select>
         {showPr && <select name="prId" className="border border-line px-3 py-2">{prs.map((pr) => <option key={pr.id} value={pr.id}>{pr.fullName}</option>)}</select>}
         <input name="notes" placeholder="Why" className="border border-line px-3 py-2 md:col-span-2" />
+        <label className="flex items-center gap-2 text-sm md:col-span-2">
+          <input name="age" type="checkbox" required />
+          Guest is 18 or older
+        </label>
       </div>
       {error && <p className="text-sm text-danger">{error}</p>}
       <button type="submit" className="border border-ink px-4 py-2">Request comp</button>
@@ -208,12 +218,21 @@ export function ChatPanel({ eventId }: { eventId: string | null }) {
               </li>
             ))}
           </ul>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input id="bulk-age" type="checkbox" />
+            Everyone on this list is 18 or older
+          </label>
           <button
             type="button"
             className="mt-3 bg-ink px-4 py-2 text-paper"
             onClick={async () => {
               if (!eventId) return;
-              await api("/api/rpc", { action: "logBulk", payload: { eventId, rows: preview.map(({ guestName, phone, ticketTypeId }) => ({ guestName, phone, ticketTypeId })) } });
+              const age = (document.getElementById("bulk-age") as HTMLInputElement | null)?.checked;
+              if (!age) {
+                setError("Confirm everyone on the list is 18 or older");
+                return;
+              }
+              await api("/api/rpc", { action: "logBulk", payload: { eventId, ageConfirmed: true, rows: preview.map(({ guestName, phone, ticketTypeId }) => ({ guestName, phone, ticketTypeId })) } });
               router.push("/guests");
               router.refresh();
             }}
@@ -229,6 +248,7 @@ export function ChatPanel({ eventId }: { eventId: string | null }) {
 export function DoorBoard({ eventId }: { eventId: string }) {
   const [query, setQuery] = useState("");
   const [guests, setGuests] = useState<{ id: string; guestName: string; ticketTypeName: string; phoneLast4: string; checkedInAt: string | null; isComp: boolean; compStatus: string | null; status: string }[]>([]);
+  const [inside, setInside] = useState(0);
   const [flash, setFlash] = useState("");
 
   useEffect(() => {
@@ -237,7 +257,10 @@ export function DoorBoard({ eventId }: { eventId: string }) {
       fetch(`/api/door?event=${eventId}&q=${encodeURIComponent(query)}`, { credentials: "same-origin" })
         .then((response) => response.json())
         .then((data) => {
-          if (!stop) setGuests(data.guests ?? []);
+          if (!stop) {
+            setGuests(data.guests ?? []);
+            setInside(typeof data.checkedIn === "number" ? data.checkedIn : 0);
+          }
         })
         .catch(() => undefined);
     };
@@ -251,7 +274,8 @@ export function DoorBoard({ eventId }: { eventId: string }) {
 
   return (
     <div>
-      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or phone" className="w-full border border-ink bg-panel px-3 py-4 text-lg" />
+      <p className="num text-4xl">{inside} inside</p>
+      <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name or phone" className="mt-3 w-full border border-ink bg-panel px-3 py-4 text-lg" />
       {flash && <p className="mt-3 border border-ink px-3 py-3 text-lg">{flash}</p>}
       <ul className="mt-3 divide-y divide-line border border-line bg-panel">
         {guests.map((guest) => (
@@ -286,7 +310,7 @@ export function DoorBoard({ eventId }: { eventId: string }) {
   );
 }
 
-export function EventForm({ prs, partners }: { prs: Pr[]; partners: Pr[] }) {
+export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partners: Pr[]; ticketing?: Pr[] }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [collab, setCollab] = useState(false);
@@ -297,6 +321,11 @@ export function EventForm({ prs, partners }: { prs: Pr[]; partners: Pr[] }) {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
         const prIds = prs.filter((pr) => form.get(`pr-${pr.id}`) === "on").map((pr) => pr.id);
+        const ticketingPartners = ticketing.filter((partner) => form.get(`tp-${partner.id}`) === "on").map((partner) => ({
+          id: partner.id,
+          flatRupees: Number(form.get(`tp-flat-${partner.id}`) || 100),
+          percent: form.get(`tp-pct-${partner.id}`) === "" ? null : Number(form.get(`tp-pct-${partner.id}`)),
+        }));
         try {
           await api("/api/rpc", {
             action: "saveEvent",
@@ -319,6 +348,7 @@ export function EventForm({ prs, partners }: { prs: Pr[]; partners: Pr[] }) {
                 { name: "Female", priceRupees: Number(form.get("female")) },
               ],
               prIds,
+              ticketingPartners,
             },
           });
           router.push("/events");
@@ -354,6 +384,21 @@ export function EventForm({ prs, partners }: { prs: Pr[]; partners: Pr[] }) {
           </select>
           <input name="split" type="number" min="0" max="100" placeholder="Their profit %" className="border border-line px-3 py-2" />
         </div>
+      )}
+      {ticketing.length > 0 && (
+        <fieldset className="border border-line p-3">
+          <legend className="px-1 text-sm">Ticketing partners</legend>
+          <div className="grid gap-3">
+            {ticketing.map((partner) => (
+              <label key={partner.id} className="grid gap-2 text-sm md:grid-cols-[1fr_120px_120px] md:items-center">
+                <span className="flex items-center gap-2"><input type="checkbox" name={`tp-${partner.id}`} /> {partner.fullName}</span>
+                <input name={`tp-flat-${partner.id}`} type="number" min="0" defaultValue="100" className="border border-line px-2 py-1" aria-label={`${partner.fullName} rupees per guest`} />
+                <input name={`tp-pct-${partner.id}`} type="number" min="0" max="100" placeholder="Their %" className="border border-line px-2 py-1" aria-label={`${partner.fullName} percent`} />
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">Flat rupees per paying guest, default 100, plus a percent of their ticket money. Leave the percent blank to use the rate on the partner.</p>
+        </fieldset>
       )}
       <fieldset className="border border-line p-3">
         <legend className="px-1 text-sm">PRs on this event</legend>

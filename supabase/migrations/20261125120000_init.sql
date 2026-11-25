@@ -58,6 +58,7 @@ create table public.profiles (
   is_owner boolean not null default false,
   owner_slot text check (owner_slot in ('vedanshu', 'rishab')),
   commission_bps integer not null default 0 check (commission_bps between 0 and 10000),
+  commission_paise integer not null default 10000 check (commission_paise >= 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
@@ -87,7 +88,7 @@ create table public.events (
   event_date date not null,
   venue text not null,
   starts_at timestamptz not null,
-  status text not null default 'draft' check (status in ('draft', 'published', 'live', 'settled')),
+  status text not null default 'draft' check (status in ('draft', 'published', 'live', 'settled', 'cancelled', 'postponed')),
   pr_commission_paise integer not null default 0 check (pr_commission_paise >= 0),
   bar_revenue_paise integer not null default 0 check (bar_revenue_paise >= 0),
   bar_split_bps integer not null default 0 check (bar_split_bps between 0 and 10000),
@@ -96,6 +97,14 @@ create table public.events (
   collab_brand text not null default '',
   collab_partner_id uuid references public.profiles (id),
   collab_split_bps integer not null default 0 check (collab_split_bps between 0 and 10000),
+  collab_shares jsonb not null default '[]'::jsonb,
+  kind text not null default 'club_night',
+  capacity integer check (capacity is null or capacity >= 0),
+  min_age integer not null default 18,
+  alcohol boolean not null default true,
+  guardian_required boolean not null default false,
+  waitlist_count integer not null default 0 check (waitlist_count >= 0),
+  postponed_to date,
   settled_at timestamptz,
   created_by uuid references public.profiles (id),
   created_at timestamptz not null default now(),
@@ -117,6 +126,7 @@ create table public.event_staff (
   profile_id uuid not null references public.profiles (id) on delete cascade,
   side text not null check (side in ('rvt', 'collab')),
   commission_paise integer check (commission_paise is null or commission_paise >= 0),
+  commission_bps integer check (commission_bps is null or commission_bps between 0 and 10000),
   unique (event_id, profile_id)
 );
 
@@ -129,7 +139,10 @@ create table public.sales (
   guest_name text not null check (char_length(guest_name) between 1 and 120),
   ticket_type_id uuid not null references public.ticket_types (id),
   amount_paise integer not null check (amount_paise >= 0),
-  status text not null default 'pending' check (status in ('pending', 'verified', 'rejected')),
+  status text not null default 'pending' check (status in ('pending', 'verified', 'rejected', 'refunded')),
+  payment_method text not null default 'upi' check (payment_method in ('upi', 'cash', 'partner', 'rsvp')),
+  check_in_code text,
+  collab_partner_id uuid references public.profiles (id),
   is_comp boolean not null default false,
   comp_status text check (comp_status in ('pending', 'approved', 'rejected')),
   collected_by text not null default 'pr' check (collected_by in ('pr', 'company', 'ticketing_partner')),
@@ -220,6 +233,7 @@ create table public.rate_limits (
 create index sales_event_idx on public.sales (event_id) where deleted_at is null;
 create index sales_pr_idx on public.sales (pr_id) where deleted_at is null;
 create index sales_ticketing_idx on public.sales (ticketing_partner_id) where deleted_at is null;
+create index sales_code_idx on public.sales (check_in_code) where check_in_code is not null;
 create index sale_secrets_hmac_idx on public.sale_secrets (phone_hmac);
 create index event_staff_profile_idx on public.event_staff (profile_id);
 create index events_date_idx on public.events (event_date);
@@ -443,24 +457,27 @@ begin
   select coalesce(jsonb_agg(jsonb_build_object(
     'id', grouped.partner_id,
     'name', grouped.full_name,
-    'commissionPaise', (grouped.revenue * grouped.bps) / 10000,
+    'commissionPaise', grouped.tickets * grouped.flat + (grouped.revenue * grouped.bps) / 10000,
     'collectedPaise', grouped.collected,
-    'dueToCompanyPaise', grouped.collected - (grouped.revenue * grouped.bps) / 10000
+    'dueToCompanyPaise', grouped.collected - (grouped.tickets * grouped.flat + (grouped.revenue * grouped.bps) / 10000)
   )), '[]'::jsonb)
   into ticketing_lines
   from (
     select s.ticketing_partner_id as partner_id,
            p.full_name,
            coalesce(sum(s.amount_paise), 0)::integer as revenue,
-           p.commission_bps as bps,
+           count(*)::integer as tickets,
+           coalesce(es.commission_bps, p.commission_bps, 0) as bps,
+           coalesce(es.commission_paise, p.commission_paise, 10000) as flat,
            coalesce(sum(s.amount_paise) filter (where s.collected_by = 'ticketing_partner'), 0)::integer as collected
     from public.sales s
     join public.profiles p on p.id = s.ticketing_partner_id
+    left join public.event_staff es on es.event_id = s.event_id and es.profile_id = s.ticketing_partner_id
     where s.event_id = p_event_id
       and s.deleted_at is null
       and s.is_comp = false
       and s.status = 'verified'
-    group by s.ticketing_partner_id, p.full_name, p.commission_bps
+    group by s.ticketing_partner_id, p.full_name, p.commission_bps, p.commission_paise, es.commission_bps, es.commission_paise
   ) grouped;
 
   select coalesce(sum((line ->> 'commissionPaise')::integer), 0)::integer
@@ -469,7 +486,11 @@ begin
 
   bar_share := ev.bar_revenue_paise * ev.bar_split_bps / 10000;
   profit := ticket_revenue + (ev.bar_revenue_paise - bar_share) - expense_total - pr_commission - ticketing_commission;
-  if ev.is_collab then
+  if ev.is_collab and jsonb_typeof(ev.collab_shares) = 'array' and jsonb_array_length(ev.collab_shares) > 0 then
+    select coalesce(sum((profit * (share ->> 'splitBps')::integer) / 10000), 0)::integer
+    into collab_share
+    from jsonb_array_elements(ev.collab_shares) share;
+  elsif ev.is_collab then
     collab_share := profit * ev.collab_split_bps / 10000;
   end if;
   rvt_share := profit - collab_share;
@@ -530,7 +551,7 @@ begin
   if uid is null or role is null then
     raise exception 'unauthenticated';
   end if;
-  if role not in ('admin', 'pr', 'data_entry') then
+  if role not in ('admin', 'pr', 'data_entry', 'collab_partner') then
     raise exception 'forbidden';
   end if;
   select * into ev from public.events where id = p_event_id and deleted_at is null;
@@ -538,7 +559,18 @@ begin
     raise exception 'not found';
   end if;
   use_side := case when p_side = 'collab' then 'collab' else 'rvt' end;
-  if role = 'pr' then
+  if role = 'collab_partner' then
+    if use_side <> 'collab' or ev.is_collab = false then
+      raise exception 'forbidden';
+    end if;
+    if ev.collab_partner_id is distinct from uid and not exists (
+      select 1 from jsonb_array_elements(ev.collab_shares) share
+      where share ->> 'partnerId' = uid::text
+    ) then
+      raise exception 'forbidden';
+    end if;
+    use_pr := null;
+  elsif role = 'pr' then
     if use_side <> 'rvt' then
       raise exception 'forbidden';
     end if;
@@ -563,14 +595,27 @@ begin
   if price is null then
     raise exception 'unknown ticket';
   end if;
+  if ev.capacity is not null then
+    perform pg_advisory_xact_lock(hashtext(p_event_id::text));
+    if (
+      select count(*) from public.sales s
+      where s.event_id = p_event_id
+        and s.deleted_at is null
+        and s.status not in ('rejected', 'refunded')
+    ) >= ev.capacity then
+      update public.events set waitlist_count = waitlist_count + 1 where id = p_event_id;
+      raise exception 'sold out';
+    end if;
+  end if;
   perform set_config('app.trusted', 'on', true);
   insert into public.sales (
     id, event_id, pr_id, promoter_name, side, guest_name, ticket_type_id,
     amount_paise, status, is_comp, comp_status, collected_by, ticketing_partner_id,
-    logged_by, proof_path, source, notes, phone_last4
+    logged_by, proof_path, source, notes, phone_last4, collab_partner_id
   ) values (
     new_id, p_event_id, use_pr,
-    case when use_side = 'collab' then left(coalesce(p_promoter_name, 'Collab'), 120) else null end,
+    case when role = 'collab_partner' then left(coalesce(nullif(p_promoter_name, ''), (select full_name from public.profiles where id = uid)), 120)
+         when use_side = 'collab' then left(coalesce(p_promoter_name, 'Collab'), 120) else null end,
     use_side, left(p_guest_name, 120), p_ticket_type_id,
     case when p_is_comp then 0 else price end,
     'pending', coalesce(p_is_comp, false),
@@ -578,7 +623,8 @@ begin
     case when p_is_comp then 'company' else coalesce(p_collected_by, 'pr') end,
     p_ticketing_partner_id, uid, p_proof_path,
     case when p_source = 'bulk_chat' then 'bulk_chat' else 'manual' end,
-    left(coalesce(p_notes, ''), 500), left(coalesce(p_phone_last4, ''), 8)
+    left(coalesce(p_notes, ''), 500), left(coalesce(p_phone_last4, ''), 8),
+    case when role = 'collab_partner' then uid when use_side = 'collab' then ev.collab_partner_id else null end
   );
   insert into public.sale_secrets (sale_id, phone_ciphertext, phone_hmac, phone_last4)
   values (new_id, p_phone_ciphertext, p_phone_hmac, p_phone_last4);
@@ -661,6 +707,9 @@ begin
   ) then
     raise exception 'forbidden';
   end if;
+  if sale.status = 'refunded' then
+    return jsonb_build_object('result', 'refunded');
+  end if;
   if sale.is_comp and sale.comp_status is distinct from 'approved' then
     return jsonb_build_object('result', 'not_approved');
   end if;
@@ -680,6 +729,29 @@ begin
     return jsonb_build_object('result', 'already_inside', 'checkedInAt', stamp);
   end if;
   return jsonb_build_object('result', 'inside', 'checkedInAt', stamp);
+end;
+$$;
+
+create or replace function public.rvt_refund_sale(p_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := auth.uid();
+  role text := private.actor_role();
+begin
+  if uid is null or role is distinct from 'admin' then
+    raise exception 'forbidden';
+  end if;
+  perform set_config('app.trusted', 'on', true);
+  update public.sales
+  set status = 'refunded', checked_in_at = null, checked_in_by = null
+  where id = p_id and deleted_at is null and status <> 'rejected';
+  if not found then
+    raise exception 'not found';
+  end if;
 end;
 $$;
 
@@ -1026,8 +1098,14 @@ using (
     )
     or (
       (select private.actor_role()) = 'collab_partner'
-      and collab_partner_id = (select auth.uid())
       and status <> 'settled'
+      and (
+        collab_partner_id = (select auth.uid())
+        or exists (
+          select 1 from jsonb_array_elements(collab_shares) share
+          where share ->> 'partnerId' = (select auth.uid())::text
+        )
+      )
     )
   )
 );
@@ -1068,12 +1146,19 @@ using (
     or (
       (select private.actor_role()) = 'collab_partner'
       and side = 'collab'
+      and (sales.collab_partner_id is null or sales.collab_partner_id = (select auth.uid()))
       and exists (
         select 1 from public.events e
         where e.id = sales.event_id
-          and e.collab_partner_id = (select auth.uid())
           and e.status <> 'settled'
           and e.deleted_at is null
+          and (
+            e.collab_partner_id = (select auth.uid())
+            or exists (
+              select 1 from jsonb_array_elements(e.collab_shares) share
+              where share ->> 'partnerId' = (select auth.uid())::text
+            )
+          )
       )
     )
   )
@@ -1108,6 +1193,39 @@ using (
   )
 );
 
+create view public.expense_rows with (security_barrier = true) as
+select
+  id,
+  event_id,
+  category,
+  case when private.actor_role() in ('admin', 'data_entry') then description else '' end as description,
+  amount_paise,
+  created_by,
+  receipt_path,
+  created_at,
+  deleted_at
+from public.expenses
+where deleted_at is null
+  and (
+    private.actor_role() in ('admin', 'data_entry')
+    or (
+      private.actor_role() = 'collab_partner'
+      and exists (
+        select 1 from public.events e
+        where e.id = expenses.event_id
+          and e.deleted_at is null
+          and e.status <> 'settled'
+          and (
+            e.collab_partner_id = (select auth.uid())
+            or exists (
+              select 1 from jsonb_array_elements(e.collab_shares) share
+              where share ->> 'partnerId' = (select auth.uid())::text
+            )
+          )
+      )
+    )
+  );
+
 create policy settlements_admin on public.settlements
 for select to authenticated
 using ((select private.is_admin()));
@@ -1138,6 +1256,9 @@ grant select on public.profiles, public.profile_private, public.profile_secrets,
   public.chat_messages, public.audit_log
 to authenticated;
 
+revoke select on table public.expenses from authenticated;
+grant select on public.expense_rows to authenticated;
+
 revoke all on all functions in schema public from public, anon, authenticated;
 revoke all on all functions in schema private from public, anon, authenticated;
 
@@ -1149,6 +1270,7 @@ grant execute on function public.rvt_log_sale(uuid, text, uuid, uuid, text, text
 grant execute on function public.rvt_review_sale(uuid, text) to authenticated;
 grant execute on function public.rvt_review_comp(uuid, text) to authenticated;
 grant execute on function public.rvt_check_in(uuid) to authenticated;
+grant execute on function public.rvt_refund_sale(uuid) to authenticated;
 grant execute on function public.rvt_event_facts(uuid) to authenticated;
 grant execute on function public.rvt_settlement_preview(uuid) to authenticated;
 grant execute on function public.rvt_settle_event(uuid) to authenticated;

@@ -17,7 +17,7 @@ function run(className: string) {
 
 describe("design lint", () => {
   it("fails banned utility classes", () => {
-    expect(run("bg-indigo-500 rounded-2xl from-purple-500 bg-gradient-to-r shadow-lg").length).toBeGreaterThan(0);
+    expect(run("bg-indigo-500 rounded-2xl from-purple-500 bg-gradient-to-r bg-linear-to-r shadow-lg").length).toBeGreaterThan(0);
     expect(run("bg-violet-600").length).toBeGreaterThan(0);
     expect(run("rounded-3xl").length).toBeGreaterThan(0);
   });

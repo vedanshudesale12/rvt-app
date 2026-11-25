@@ -72,7 +72,7 @@ export function Shell({
 
   return (
     <div className="min-h-screen bg-paper text-ink md:grid md:grid-cols-[232px_1fr]">
-      <aside className={`${open ? "block" : "hidden"} border-b border-line bg-invert text-paper md:block md:min-h-screen md:border-b-0 md:border-r`}>
+      <aside className={`${open ? "block" : "hidden"} border-b border-line bg-invert text-ink md:block md:min-h-screen md:border-b-0 md:border-r`}>
         <div className="flex items-center gap-3 px-4 py-4">
           <Logo className="h-10 w-10" />
           <div>
@@ -88,7 +88,7 @@ export function Shell({
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className={`border-l-2 px-4 py-3 text-sm ${active ? "border-accent text-paper" : "border-transparent text-invert-muted"}`}
+                className={`border-l-2 px-4 py-3 text-sm ${active ? "border-ink bg-accent text-ink" : "border-transparent text-invert-muted"}`}
               >
                 {item.label}
               </Link>
@@ -140,7 +140,7 @@ export function Shell({
         {banner && (
           <div className="flex items-start justify-between gap-4 border-b border-line bg-panel px-4 py-3">
             <p>
-              <span className="display text-accent">{banner.title}</span>
+              <span className="display border border-ink bg-accent px-1 text-ink">{banner.title}</span>
               <span className="mt-1 block text-sm text-muted">{banner.body}</span>
             </p>
             <button

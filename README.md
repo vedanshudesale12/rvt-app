@@ -55,6 +55,8 @@ Do the same for Rishab with `owner_slot = 'rishab'`. Owners are not editable fro
 
 Door and data-entry logins are created from People. They cannot sign themselves up.
 
+Admins browse every table from Data: users, events, sales, attendees, comps, check-ins, the ledger, settle-ups, partners, and the audit log. That screen is read-only. Changes still go through the guest list, comps, door, settle-up, and people screens, and each of those writes an audit row. Each table downloads as CSV, and the whole set downloads together. If `GOOGLE_SHEETS_SPREADSHEET_ID` and `GOOGLE_SERVICE_ACCOUNT_JSON` are set, Sync to Sheets appends the settle-up table.
+
 ## 2. Env vars
 
 Copy `.env.example` to `.env.local`. Never commit real values.
@@ -92,6 +94,8 @@ Local demo, no accounts yet:
 ```bash
 RVT_DEMO=1 npm run dev
 ```
+
+`npm run dev` listens on every interface. Open http://localhost:3000/login or http://192.168.1.5:3000/login (that LAN address is in `allowedDevOrigins`). Cookies are not marked Secure on plain HTTP, so the session sticks. Add another machine address with `allowedDevOrigins` in `next.config.ts`.
 
 Open http://localhost:3000/login. Password `demo-pass-123`. Vedanshu is `vedanshu@rvt.demo`. A PR is `aisha@rvt.demo`. Door is `imran@rvt.demo`. Data entry is `neha@rvt.demo`. Ticketing is `boxoffice@rvt.demo`. Collab is `northline@rvt.demo`.
 

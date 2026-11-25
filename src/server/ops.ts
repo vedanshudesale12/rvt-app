@@ -1,4 +1,4 @@
-import { canReadEvent, evaluateCheckIn, resolveLogger } from "@/domain/access";
+import { canReadEvent, evaluateCheckIn, holdsSeat, resolveLogger } from "@/domain/access";
 import { AppError, Forbidden, NotFound } from "@/domain/errors";
 import { guestsFromModel, parseGuestList } from "@/domain/guest-parse";
 import { kolkataStamp, rupeesToPaise } from "@/domain/money";
@@ -58,6 +58,15 @@ async function audit(store: Store, actor: Actor, action: string, entity: string,
   await store.writeAudit({ actorId: actor.id, action, entity, entityId, payload });
 }
 
+const tails = new Map<string, Promise<unknown>>();
+
+function lock<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const prev = tails.get(key) ?? Promise.resolve();
+  const run = prev.then(work, work);
+  tails.set(key, run.then(() => undefined, () => undefined));
+  return run;
+}
+
 export async function eventsFor(actor: Actor, store: Store): Promise<EventRow[]> {
   const data = await books(store);
   return data.events
@@ -78,9 +87,9 @@ export async function guestList(actor: Actor, store: Store, eventId: string) {
     prs: actor.role === "admin" || actor.role === "data_entry"
       ? data.profiles.filter((profile) => profile.role === "pr" && profile.status === "active").map((profile) => ({ id: profile.id, fullName: profile.fullName }))
       : [],
-    canLog: actor.role === "admin" || actor.role === "pr" || actor.role === "data_entry",
+    canLog: actor.role === "admin" || actor.role === "pr" || actor.role === "data_entry" || actor.role === "collab_partner",
     canVerify: actor.role === "admin",
-    readOnly: actor.role === "collab_partner",
+    readOnly: false,
   };
 }
 
@@ -112,6 +121,7 @@ function buildSale(actor: Actor, input: {
   proofPath: string | null;
   collectedBy: Sale["collectedBy"];
   ticketingPartnerId: string | null;
+  collabPartnerId?: string | null;
   source: Sale["source"];
   isComp: boolean;
 }): Sale {
@@ -129,6 +139,7 @@ function buildSale(actor: Actor, input: {
     compStatus: input.isComp ? "pending" : null,
     collectedBy: input.isComp ? "company" : input.collectedBy,
     ticketingPartnerId: input.ticketingPartnerId,
+    collabPartnerId: input.collabPartnerId ?? null,
     loggedBy: actor.id,
     proofPath: input.proofPath,
     checkedInAt: null,
@@ -149,6 +160,10 @@ function assertOnEvent(actor: Actor, event: EventRow, assignments: Assignment[])
 }
 
 export async function logSale(actor: Actor, input: LogInput, store: Store, source: Sale["source"] = "manual"): Promise<PublicSale> {
+  return lock(`event:${input.eventId}`, () => logSaleBody(actor, input, store, source));
+}
+
+async function logSaleBody(actor: Actor, input: LogInput, store: Store, source: Sale["source"]): Promise<PublicSale> {
   const data = await books(store);
   const event = mustEvent(actor, data, input.eventId);
   const side = input.side ?? "rvt";
@@ -157,9 +172,23 @@ export async function logSale(actor: Actor, input: LogInput, store: Store, sourc
   if (prId && !data.profiles.some((profile) => profile.id === prId && profile.role === "pr" && profile.status === "active")) {
     throw new Forbidden("Pick an active PR");
   }
+  if (!input.ageConfirmed) throw new AppError(400, "Confirm the guest is 18 or older");
   if (side === "collab" && !event.isCollab) throw new Forbidden("This is not a collab event");
+  if (actor.role === "collab_partner") {
+    const attached = event.collabPartnerId === actor.id || (event.collabShares ?? []).some((share) => share.partnerId === actor.id);
+    if (!attached) throw new Forbidden("You're not on this event");
+  }
   const ticket = data.tickets.find((row) => row.id === input.ticketTypeId && row.eventId === event.id);
   if (!ticket) throw new NotFound("Unknown ticket");
+  const taken = data.sales.filter((row) => row.eventId === event.id && holdsSeat(row)).length;
+  if (ticket.saleEndsAt && new Date(ticket.saleEndsAt).getTime() < Date.now()) {
+    throw new AppError(400, "That ticket phase has ended");
+  }
+  if (event.capacity != null && taken >= event.capacity) {
+    event.waitlistCount = (event.waitlistCount ?? 0) + 1;
+    await store.saveEvent(event);
+    throw new AppError(409, "Sold out");
+  }
   const phone = normalizePhone(input.phone);
   const proofPath = input.proofPath ? assertStoragePath(input.proofPath) : null;
   if (proofPath && actor.role !== "admin" && !proofPath.startsWith(`proofs/${actor.id}/`)) {
@@ -172,11 +201,12 @@ export async function logSale(actor: Actor, input: LogInput, store: Store, sourc
     phone,
     prId,
     side,
-    promoterName: side === "collab" ? cleanText(input.promoterName || "Collab", 120) : null,
+    promoterName: side === "collab" ? cleanText(input.promoterName || actor.fullName, 120) : null,
     notes: input.notes ?? "",
     proofPath,
-    collectedBy: input.collectedBy ?? (input.ticketingPartnerId ? "ticketing_partner" : "pr"),
-    ticketingPartnerId: input.ticketingPartnerId ?? null,
+    collectedBy: actor.role === "collab_partner" ? "company" : input.collectedBy ?? (input.ticketingPartnerId ? "ticketing_partner" : "pr"),
+    ticketingPartnerId: actor.role === "collab_partner" ? null : input.ticketingPartnerId ?? null,
+    collabPartnerId: side === "collab" ? (actor.role === "collab_partner" ? actor.id : event.collabPartnerId) : null,
     source,
     isComp: false,
   });
@@ -192,12 +222,14 @@ export async function logBulk(
 ): Promise<PublicSale[]> {
   const saved: PublicSale[] = [];
   for (const row of rows) {
-    saved.push(await logSale(actor, { ...row, eventId, notes: "", side: "rvt" }, store, "bulk_chat"));
+    saved.push(await logSale(actor, { ...row, eventId, notes: "", side: "rvt", ageConfirmed: true }, store, "bulk_chat"));
   }
   return saved;
 }
 
 export async function requestComp(actor: Actor, input: CompInput, store: Store): Promise<PublicSale> {
+  if (actor.role === "collab_partner") throw new Forbidden("Comps are an RVT approval");
+  if (!input.ageConfirmed) throw new AppError(400, "Confirm the guest is 18 or older");
   const data = await books(store);
   const event = mustEvent(actor, data, input.eventId);
   assertOnEvent(actor, event, data.assignments);
@@ -259,46 +291,77 @@ export function reviewComp(actor: Actor, id: string, decision: "approved" | "rej
 }
 
 export async function checkIn(actor: Actor, saleId: string, store: Store) {
+  return lock(`sale:${saleId}`, async () => {
+    const data = await books(store);
+    const sale = data.sales.find((row) => row.id === saleId);
+    if (!sale) throw new NotFound();
+    const event = data.events.find((row) => row.id === sale.eventId);
+    if (!event) throw new NotFound();
+    const decision = evaluateCheckIn(actor, sale, event, data.assignments);
+    if (decision.result !== "inside") return decision;
+    sale.checkedInAt = new Date().toISOString();
+    sale.checkedInBy = actor.id;
+    await store.saveSale(sale);
+    await audit(store, actor, "check_in", "sales", sale.id, { checkedInAt: sale.checkedInAt });
+    return { result: "inside" as const, checkedInAt: sale.checkedInAt };
+  });
+}
+
+export async function refundSale(actor: Actor, saleId: string, store: Store) {
+  if (actor.role !== "admin") throw new Forbidden();
   const data = await books(store);
-  const sale = data.sales.find((row) => row.id === saleId);
+  const sale = data.sales.find((row) => row.id === saleId && !row.deletedAt);
   if (!sale) throw new NotFound();
-  const event = data.events.find((row) => row.id === sale.eventId);
-  if (!event) throw new NotFound();
-  const decision = evaluateCheckIn(actor, sale, event, data.assignments);
-  if (decision.result !== "inside") return decision;
-  sale.checkedInAt = new Date().toISOString();
-  sale.checkedInBy = actor.id;
+  if (sale.status === "rejected") throw new Forbidden("Rejected guests are not refunded");
+  sale.status = "refunded";
+  sale.checkedInAt = null;
+  sale.checkedInBy = null;
   await store.saveSale(sale);
-  await audit(store, actor, "check_in", "sales", sale.id, { checkedInAt: sale.checkedInAt });
-  return { result: "inside" as const, checkedInAt: sale.checkedInAt };
+  await audit(store, actor, "refund", "sales", sale.id, {});
+  return { id: sale.id, status: sale.status };
 }
 
 export async function doorSearch(actor: Actor, store: Store, eventId: string, query: string) {
   if (actor.role !== "admin" && actor.role !== "pr" && actor.role !== "door") throw new Forbidden();
-  const data = await books(store);
-  const event = mustEvent(actor, data, eventId);
+  const [events, tickets, assignments, sales] = await Promise.all([
+    store.events(),
+    store.tickets(),
+    store.assignments(),
+    store.sales(),
+  ]);
+  const event = events.find((row) => row.id === eventId);
+  if (!event || !canReadEvent(actor, event, assignments)) throw new NotFound();
+  const ticketName = new Map(tickets.filter((ticket) => ticket.eventId === event.id).map((ticket) => [ticket.id, ticket.name]));
+  const eventSales = sales.filter((row) => row.eventId === event.id && !row.deletedAt);
+  const checkedIn = eventSales.filter((row) => row.checkedInAt).length;
   const needle = query.trim().toLowerCase();
   const digits = needle.replace(/\D/g, "");
+  const last4Query = digits.slice(-4);
   const rows = [];
-  for (const sale of data.sales.filter((row) => row.eventId === event.id && !row.deletedAt)) {
-    const phone = await store.salePhone(sale.id);
-    const hit = !needle
+  for (const sale of eventSales) {
+    const named = !needle
       || sale.guestName.toLowerCase().includes(needle)
-      || (digits.length >= 3 && sale.phoneLast4.includes(digits.slice(-4)))
-      || (digits.length >= 8 && !!phone && phone.endsWith(digits));
+      || (sale.checkInCode ? sale.checkInCode.toLowerCase() === needle : false)
+      || (digits.length >= 3 && digits.length < 8 && sale.phoneLast4.includes(last4Query));
+    let hit = named;
+    if (!hit && digits.length >= 8 && sale.phoneLast4 === last4Query) {
+      const phone = await store.salePhone(sale.id);
+      hit = !!phone && phone.endsWith(digits);
+    }
     if (!hit) continue;
     rows.push({
       id: sale.id,
       guestName: sale.guestName,
-      ticketTypeName: data.tickets.find((ticket) => ticket.id === sale.ticketTypeId)?.name ?? "Ticket",
+      ticketTypeName: ticketName.get(sale.ticketTypeId) ?? "Ticket",
       phoneLast4: sale.phoneLast4,
       checkedInAt: sale.checkedInAt,
       status: sale.status,
       isComp: sale.isComp,
       compStatus: sale.compStatus,
     });
+    if (rows.length >= 40) break;
   }
-  return { event: { id: event.id, name: event.name, venue: event.venue }, guests: rows };
+  return { event: { id: event.id, name: event.name, venue: event.venue }, guests: rows, checkedIn, listed: eventSales.length };
 }
 
 export async function dashboard(actor: Actor, store: Store, eventId: string) {
@@ -390,17 +453,36 @@ function boardRows(data: Awaited<ReturnType<typeof books>>, role: Role): BoardRo
       revenuePaise,
       commissionPaise: role === "pr"
         ? mine.length * (data.events.find((event) => event.id === mine[0]?.eventId)?.prCommissionPaise ?? 0)
-        : Math.trunc((revenuePaise * profile.commissionBps) / 10000),
+        : mine.length * (profile.commissionPaise ?? 10_000) + Math.trunc((revenuePaise * profile.commissionBps) / 10000),
     };
   }).sort((a, b) => b.tickets - a.tickets || a.name.localeCompare(b.name));
+}
+
+function collabBoard(data: Awaited<ReturnType<typeof books>>): BoardRow[] {
+  const groups = new Map<string, { tickets: number; revenuePaise: number }>();
+  for (const sale of data.sales) {
+    if (sale.deletedAt || sale.side !== "collab" || sale.isComp || sale.status !== "verified") continue;
+    const name = sale.promoterName || "Collab";
+    const current = groups.get(name) ?? { tickets: 0, revenuePaise: 0 };
+    current.tickets += 1;
+    current.revenuePaise += sale.amountPaise;
+    groups.set(name, current);
+  }
+  return [...groups.entries()]
+    .map(([name, value]) => ({ name, tickets: value.tickets, revenuePaise: value.revenuePaise }))
+    .sort((a, b) => b.tickets - a.tickets || a.name.localeCompare(b.name));
 }
 
 export async function leaderboard(actor: Actor, store: Store) {
   const data = await books(store);
   if (actor.role === "ticketing_partner") {
-    return { kind: "ticketing" as const, rows: presentTicketingBoard(actor, boardRows(data, "ticketing_partner")) };
+    return { kind: "ticketing" as const, rows: presentTicketingBoard(actor, boardRows(data, "ticketing_partner")), collabRows: [] as BoardRow[] };
   }
-  return { kind: "pr" as const, rows: presentPrBoard(actor, boardRows(data, "pr")) };
+  return {
+    kind: "pr" as const,
+    rows: presentPrBoard(actor, boardRows(data, "pr")),
+    collabRows: actor.role === "admin" ? collabBoard(data) : [],
+  };
 }
 
 export async function ticketingHome(actor: Actor, store: Store, eventId: string | null) {
@@ -418,6 +500,9 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
   const data = await books(store);
   const existing = input.id ? data.events.find((event) => event.id === input.id) : undefined;
   if (input.id && !existing) throw new NotFound();
+  const collabPartners = input.collabPartners ?? (input.isCollab && input.collabPartnerId
+    ? [{ id: input.collabPartnerId, brand: input.collabBrand ?? "", splitPercent: input.collabSplitPercent }]
+    : []);
   const event: EventRow = {
     id: existing?.id ?? crypto.randomUUID(),
     name: cleanText(input.name, 120),
@@ -429,13 +514,23 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
     barRevenuePaise: rupeesToPaise(input.barRevenueRupees),
     barSplitBps: Math.round(input.barSplitPercent * 100),
     barPartnerName: cleanText(input.barPartnerName ?? "", 120),
-    isCollab: input.isCollab,
-    collabBrand: cleanText(input.collabBrand ?? "", 120),
-    collabPartnerId: input.isCollab ? input.collabPartnerId ?? null : null,
-    collabSplitBps: input.isCollab ? Math.round(input.collabSplitPercent * 100) : 0,
+    isCollab: collabPartners.length > 0,
+    collabBrand: collabPartners.map((partner) => cleanText(partner.brand || "Collab", 120)).join(" + "),
+    collabPartnerId: collabPartners[0]?.id ?? null,
+    collabSplitBps: collabPartners.reduce((sum, partner) => sum + Math.round(partner.splitPercent * 100), 0),
+    collabShares: collabPartners.map((partner) => ({
+      brand: cleanText(partner.brand || "Collab", 120),
+      splitBps: Math.round(partner.splitPercent * 100),
+      partnerId: partner.id,
+    })),
     settledAt: input.status === "settled" ? existing?.settledAt ?? new Date().toISOString() : null,
     createdBy: existing?.createdBy ?? actor.id,
     deletedAt: null,
+    kind: (input.kind as EventRow["kind"]) || existing?.kind || "club_night",
+    capacity: input.capacity ?? null,
+    minAge: 18,
+    alcohol: true,
+    postponedTo: input.status === "postponed" ? input.postponedTo ?? null : null,
   };
   if (event.collabPartnerId && !data.profiles.some((profile) => profile.id === event.collabPartnerId && profile.role === "collab_partner")) {
     throw new Forbidden("Pick a collab partner");
@@ -447,6 +542,7 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
     name: cleanText(ticket.name, 80),
     pricePaise: rupeesToPaise(ticket.priceRupees),
     sortOrder: index + 1,
+    saleEndsAt: ticket.saleEndsAt ?? null,
   }));
   await store.saveTickets(event.id, tickets);
   const assignments: Assignment[] = input.prIds.map((profileId) => ({
@@ -456,8 +552,23 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
     side: "rvt" as const,
     commissionPaise: null,
   }));
-  if (event.collabPartnerId) {
-    assignments.push({ id: crypto.randomUUID(), eventId: event.id, profileId: event.collabPartnerId, side: "collab", commissionPaise: null });
+  for (const partner of collabPartners) {
+    if (!data.profiles.some((profile) => profile.id === partner.id && profile.role === "collab_partner")) {
+      throw new Forbidden("Pick a collab partner");
+    }
+    assignments.push({ id: crypto.randomUUID(), eventId: event.id, profileId: partner.id, side: "collab", commissionPaise: null });
+  }
+  for (const partner of input.ticketingPartners ?? []) {
+    const profile = data.profiles.find((row) => row.id === partner.id && row.role === "ticketing_partner" && row.status === "active");
+    if (!profile) throw new Forbidden("Pick a ticketing partner");
+    assignments.push({
+      id: crypto.randomUUID(),
+      eventId: event.id,
+      profileId: partner.id,
+      side: "rvt",
+      commissionPaise: rupeesToPaise(partner.flatRupees),
+      commissionBps: partner.percent == null ? null : Math.round(partner.percent * 100),
+    });
   }
   await store.saveAssignments(event.id, assignments);
   const publishing = event.status === "published" && existing?.status !== "published";

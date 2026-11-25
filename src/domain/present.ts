@@ -148,6 +148,17 @@ export function presentDashboard(
         amountPaise: actor.role === "admin" ? value.amountPaise : undefined,
       });
     }
+    if (actor.role === "admin") {
+      const promoters = new Map<string, { count: number; amountPaise: number }>();
+      for (const sale of visible.filter((row) => row.side === "collab")) {
+        const name = sale.promoterName || "Collab";
+        const current = promoters.get(name) ?? { count: 0, amountPaise: 0 };
+        current.count += 1;
+        if (sale.status === "verified" && !sale.isComp) current.amountPaise += sale.amountPaise;
+        promoters.set(name, current);
+      }
+      for (const [name, value] of promoters) byPr.push({ name, count: value.count, amountPaise: value.amountPaise });
+    }
   }
   const days = new Map<string, number>();
   for (const sale of visible) {
@@ -187,12 +198,13 @@ export function presentLedger(actor: Actor, expenses: Expense[], settlement: Set
   if (actor.role !== "admin" && actor.role !== "data_entry" && actor.role !== "collab_partner") {
     throw new Forbidden();
   }
+  const showNotes = actor.role !== "collab_partner";
   const rows = expenses
     .filter((row) => !row.deletedAt)
     .map((row) => ({
       id: row.id,
       category: row.category,
-      description: row.description,
+      description: showNotes ? row.description : "",
       amountPaise: row.amountPaise,
       createdAt: row.createdAt,
     }));

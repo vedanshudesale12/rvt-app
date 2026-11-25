@@ -13,7 +13,11 @@ export function canReadEvent(actor: Actor, event: EventRow, assignments: Assignm
     return assignments.some((row) => row.eventId === event.id && row.profileId === actor.id);
   }
   if (actor.role === "collab_partner") {
-    return event.isCollab && event.collabPartnerId === actor.id && event.status !== "settled";
+    const partners = new Set([
+      event.collabPartnerId,
+      ...(event.collabShares ?? []).map((share) => share.partnerId),
+    ]);
+    return event.isCollab && partners.has(actor.id) && event.status !== "settled";
   }
   return false;
 }
@@ -24,7 +28,9 @@ export function canReadSale(actor: Actor, sale: Sale, event: EventRow): boolean 
   if (actor.role === "pr") return sale.side === "rvt" && sale.prId === actor.id;
   if (actor.role === "ticketing_partner") return sale.ticketingPartnerId === actor.id;
   if (actor.role === "collab_partner") {
-    return event.collabPartnerId === actor.id && event.status !== "settled" && sale.side === "collab";
+    if (!canReadEvent(actor, event, [])) return false;
+    if (sale.side !== "collab") return false;
+    return !sale.collabPartnerId || sale.collabPartnerId === actor.id;
   }
   return false;
 }
@@ -52,8 +58,12 @@ export function resolveLogger(
   side: "rvt" | "collab",
 ): string | null {
   if (!isActive(actor)) throw new Forbidden();
-  if (actor.role === "collab_partner" || actor.role === "door" || actor.role === "ticketing_partner") {
+  if (actor.role === "door" || actor.role === "ticketing_partner") {
     throw new Forbidden("You can't add guests");
+  }
+  if (actor.role === "collab_partner") {
+    if (side !== "collab") throw new Forbidden("You can only log your own guests");
+    return null;
   }
   if (actor.role === "pr") {
     if (side !== "rvt") throw new Forbidden("You can only log your own guests");
@@ -85,8 +95,17 @@ export function evaluateCheckIn(actor: Actor, sale: Sale, event: EventRow, assig
   if (sale.deletedAt || sale.status === "rejected" || sale.compStatus === "rejected") {
     throw new Forbidden("This guest is not on the list");
   }
+  if (sale.status === "refunded") throw new Forbidden("This guest was refunded");
   if (sale.isComp && sale.compStatus !== "approved") return { result: "not_approved" };
   if (!sale.isComp && sale.status !== "verified") return { result: "not_verified" };
   if (sale.checkedInAt) return { result: "already_inside", checkedInAt: sale.checkedInAt };
   return { result: "inside" };
+}
+
+/** A seat stays taken until the sale is rejected, refunded, or deleted. */
+export function holdsSeat(sale: Sale): boolean {
+  if (sale.deletedAt) return false;
+  if (sale.status === "rejected" || sale.status === "refunded") return false;
+  if (sale.isComp && sale.compStatus === "rejected") return false;
+  return true;
 }

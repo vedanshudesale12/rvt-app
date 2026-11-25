@@ -9,7 +9,8 @@ export async function GET(request: Request) {
   return handle(async () => {
     const actor = await currentActor();
     if (!actor) throw new AppError(401, "Sign in required");
-    await hitLimit(`door:${actor.id}`, 240, 60 * 1000);
+    const cap = actor.role === "door" ? 2000 : 240;
+    await hitLimit(`door:${actor.id}`, cap, 60 * 1000);
     const url = new URL(request.url);
     const eventId = url.searchParams.get("event") ?? "";
     const query = url.searchParams.get("q") ?? "";

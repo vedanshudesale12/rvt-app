@@ -3,6 +3,7 @@ const BANNED = [
   /\brounded-(?:2xl|3xl)\b/,
   /\bfrom-purple\b/,
   /\bbg-gradient-to-/,
+  /\bbg-linear-to-/,
   /\bshadow(?:-[a-z0-9]+)?\b/,
 ];
 

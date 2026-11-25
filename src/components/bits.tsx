@@ -1,25 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { APP } from "@/config/brand";
 import { api } from "@/components/use-api";
 
 export function CookieNotice() {
-  const ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (document.cookie.includes("rvt_cookie_ok=1") && ref.current) ref.current.hidden = true;
+    if (document.cookie.includes("rvt_cookie_ok=1")) return;
+    const id = window.setTimeout(() => setOpen(true), 0);
+    return () => window.clearTimeout(id);
   }, []);
+  if (!open) return null;
   return (
-    <div ref={ref} className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-invert px-4 py-3 text-sm text-paper">
+    <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-line bg-invert px-4 py-3 pr-28 text-sm text-ink">
       <p>
         {APP.name} only uses essential cookies: your session, a security token, and the event you have open.
       </p>
       <button
         type="button"
-        className="mt-2 border border-paper px-3 py-1"
+        className="shrink-0 border border-ink px-3 py-1"
         onClick={() => {
           document.cookie = "rvt_cookie_ok=1; path=/; max-age=31536000; samesite=lax";
-          if (ref.current) ref.current.hidden = true;
+          setOpen(false);
         }}
       >
         OK

@@ -9,11 +9,16 @@ export type PrLine = {
   collectedPaise: number;
 };
 
+/** Rs 100 per paying guest when a partner has no flat rate of their own. */
+export const DEFAULT_TICKETING_FLAT_PAISE = 10_000;
+
 export type TicketingLine = {
   id: string;
   name: string;
   revenuePaise: number;
+  paidTickets: number;
   commissionBps: number;
+  flatPaise: number;
   collectedPaise: number;
 };
 
@@ -26,6 +31,8 @@ export type SettlementInput = {
   prLines: PrLine[];
   ticketingLines: TicketingLine[];
   collab: { brand: string; splitBps: number; partnerId: string | null } | null;
+  /** When set, each company takes its own basis points of profit before the 50-50. */
+  collabShares?: { brand: string; splitBps: number }[];
 };
 
 export type SettlementLine = {
@@ -48,6 +55,7 @@ export type Settlement = {
   profitPaise: number;
   collabSharePaise: number;
   collabBrand: string | null;
+  collabLines: { brand: string; sharePaise: number }[];
   rvtSharePaise: number;
   vedanshuPaise: number;
   rishabPaise: number;
@@ -93,12 +101,15 @@ export function settlementFromBooks(
   );
   const ticketingLines: TicketingLine[] = [...partnerIds].map((id) => {
     const profile = profiles.find((row) => row.id === id);
+    const staff = assignments.find((row) => row.eventId === event.id && row.profileId === id);
     const mine = eventSales.filter((sale) => sale.ticketingPartnerId === id && paid(sale));
     return {
       id,
       name: profile?.fullName ?? "Ticketing partner",
       revenuePaise: mine.reduce((sum, sale) => sum + sale.amountPaise, 0),
-      commissionBps: profile?.commissionBps ?? 0,
+      paidTickets: mine.length,
+      commissionBps: staff?.commissionBps ?? profile?.commissionBps ?? 0,
+      flatPaise: staff?.commissionPaise ?? profile?.commissionPaise ?? DEFAULT_TICKETING_FLAT_PAISE,
       collectedPaise: mine
         .filter((sale) => sale.collectedBy === "ticketing_partner")
         .reduce((sum, sale) => sum + sale.amountPaise, 0),
@@ -117,6 +128,10 @@ export function settlementFromBooks(
     collab: event.isCollab
       ? { brand: event.collabBrand || "Collab", splitBps: event.collabSplitBps, partnerId: event.collabPartnerId }
       : null,
+    collabShares:
+      event.collabShares && event.collabShares.length > 0
+        ? event.collabShares.map((share) => ({ brand: share.brand, splitBps: share.splitBps }))
+        : undefined,
   };
 }
 
@@ -137,7 +152,7 @@ export function computeSettlement(input: SettlementInput): Settlement {
     };
   });
   const ticketingLines = input.ticketingLines.map((line) => {
-    const commissionPaise = bpsShare(line.revenuePaise, line.commissionBps);
+    const commissionPaise = (line.paidTickets ?? 0) * (line.flatPaise ?? 0) + bpsShare(line.revenuePaise, line.commissionBps);
     return {
       id: line.id,
       name: line.name,
@@ -156,7 +171,17 @@ export function computeSettlement(input: SettlementInput): Settlement {
     input.expensesPaise -
     prCommissionPaise -
     ticketingCommissionPaise;
-  const collabSharePaise = input.collab ? bpsShare(profitPaise, input.collab.splitBps) : 0;
+  const shares =
+    input.collabShares && input.collabShares.length > 0
+      ? input.collabShares
+      : input.collab
+        ? [{ brand: input.collab.brand, splitBps: input.collab.splitBps }]
+        : [];
+  const collabLines = shares.map((share) => ({
+    brand: share.brand,
+    sharePaise: bpsShare(profitPaise, share.splitBps),
+  }));
+  const collabSharePaise = collabLines.reduce((sum, line) => sum + line.sharePaise, 0);
   const rvtSharePaise = profitPaise - collabSharePaise;
   const rishabPaise = Math.trunc(rvtSharePaise / 2);
   const vedanshuPaise = rvtSharePaise - rishabPaise;
@@ -171,7 +196,8 @@ export function computeSettlement(input: SettlementInput): Settlement {
     ticketingCommissionPaise,
     profitPaise,
     collabSharePaise,
-    collabBrand: input.collab?.brand ?? null,
+    collabBrand: collabLines.length ? collabLines.map((line) => line.brand).join(" + ") : null,
+    collabLines,
     rvtSharePaise,
     vedanshuPaise,
     rishabPaise,

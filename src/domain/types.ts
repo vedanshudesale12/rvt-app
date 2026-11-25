@@ -13,8 +13,52 @@ export const SIGNUP_ROLES = ["pr", "ticketing_partner", "collab_partner"] as con
 export type SignupRole = (typeof SIGNUP_ROLES)[number];
 
 export type Status = "active" | "pending" | "disabled";
-export type EventStatus = "draft" | "published" | "live" | "settled";
-export type SaleStatus = "pending" | "verified" | "rejected";
+export type EventStatus = "draft" | "published" | "live" | "settled" | "cancelled" | "postponed";
+export type SaleStatus = "pending" | "verified" | "rejected" | "refunded";
+
+export const EVENT_KINDS = [
+  "club_night",
+  "house_party",
+  "themed_party",
+  "concert",
+  "dj_night",
+  "college_fest",
+  "corporate_mixer",
+  "pool_party",
+  "rooftop",
+  "boat_party",
+  "day_party",
+  "festival_holi",
+  "festival_diwali",
+  "festival_nye",
+  "festival_halloween",
+  "festival_christmas",
+  "multiday_festival",
+  "collab_company",
+  "venue_partner",
+  "free_rsvp",
+  "guest_list",
+  "private_invite",
+  "cancelled",
+  "postponed",
+  "sold_out",
+] as const;
+
+export type EventKind = (typeof EVENT_KINDS)[number];
+
+export const SALES_COMBOS = [
+  "rvt_solo",
+  "rvt_collab",
+  "rvt_ticketing",
+  "ticketing_only",
+  "rvt_collab_ticketing",
+  "multi_collab",
+  "multi_ticketing",
+  "collab_hosted",
+  "venue_bar",
+] as const;
+
+export type SalesCombo = (typeof SALES_COMBOS)[number];
 export type CompStatus = "pending" | "approved" | "rejected";
 export type Side = "rvt" | "collab";
 export type CollectedBy = "pr" | "company" | "ticketing_partner";
@@ -38,6 +82,8 @@ export type Profile = {
   isOwner: boolean;
   ownerSlot: "vedanshu" | "rishab" | null;
   commissionBps: number;
+  /** Flat ticketing cut per paying guest, in paise. Missing means Rs 100. */
+  commissionPaise?: number;
   instagram: string;
   college: string;
   area: string;
@@ -66,6 +112,16 @@ export type EventRow = {
   settledAt: string | null;
   createdBy: string | null;
   deletedAt: string | null;
+  kind?: EventKind;
+  /** Null means no cap. */
+  capacity?: number | null;
+  minAge?: number;
+  alcohol?: boolean;
+  guardianRequired?: boolean;
+  waitlistCount?: number;
+  postponedTo?: string | null;
+  /** Extra collab companies. The first still mirrors collabPartnerId. */
+  collabShares?: { brand: string; splitBps: number; partnerId: string | null }[];
 };
 
 export type TicketType = {
@@ -74,6 +130,8 @@ export type TicketType = {
   name: string;
   pricePaise: number;
   sortOrder: number;
+  /** Early-bird or phase window. Sales outside it are refused. */
+  saleEndsAt?: string | null;
 };
 
 export type Assignment = {
@@ -82,6 +140,8 @@ export type Assignment = {
   profileId: string;
   side: Side;
   commissionPaise: number | null;
+  /** Ticketing percent override for this event. Null uses the partner's own rate. */
+  commissionBps?: number | null;
 };
 
 export type Sale = {
@@ -107,6 +167,9 @@ export type Sale = {
   phoneLast4: string;
   createdAt: string;
   deletedAt: string | null;
+  paymentMethod?: "upi" | "cash" | "partner" | "rsvp";
+  checkInCode?: string;
+  collabPartnerId?: string | null;
 };
 
 export type Expense = {

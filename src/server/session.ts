@@ -4,7 +4,7 @@ import { b64UrlToBytes, bytesToB64Url, safeEqual } from "@/server/bytes";
 const text = new TextEncoder();
 
 export function cookieSecure(): boolean {
-  return process.env.COOKIE_SECURE === "1" || process.env.NODE_ENV === "production";
+  return process.env.COOKIE_SECURE === "1";
 }
 
 export function sessionSecret(): string {

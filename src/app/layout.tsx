@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "@fontsource/archivo-narrow/700.css";
 import "@fontsource/ibm-plex-sans/400.css";
 import "@fontsource/ibm-plex-sans/500.css";
@@ -16,12 +17,13 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: APP.shortName, statusBarStyle: "black-translucent" },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en">
       <head>
         {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? (
-          <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+          <script nonce={nonce} src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
         ) : null}
       </head>
       <body>

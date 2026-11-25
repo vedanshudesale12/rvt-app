@@ -45,6 +45,7 @@ beforeAll(async () => {
     insert into public.event_staff (event_id, profile_id, side) values
       ('${ids.eventFriday}', '${ids.aisha}', 'rvt'),
       ('${ids.eventFriday}', '${ids.kabir}', 'rvt'),
+      ('${ids.eventFriday}', '${ids.boxoffice}', 'rvt'),
       ('${ids.eventCollab}', '${ids.aisha}', 'rvt');
     insert into public.sales (id, event_id, pr_id, promoter_name, side, guest_name, ticket_type_id, amount_paise, status, is_comp, collected_by, logged_by, phone_last4)
     values
@@ -53,7 +54,8 @@ beforeAll(async () => {
       ('${ids.saleCollabRvt}', '${ids.eventCollab}', '${ids.aisha}', null, 'rvt', 'Meher Joshi', '${ids.ttCollabMale}', 150000, 'verified', false, 'pr', '${ids.aisha}', '8001'),
       ('${ids.saleCollabSide}', '${ids.eventCollab}', null, 'Neel Varghese', 'collab', 'Tara Nair', '${ids.ttCollabMale}', 100000, 'verified', false, 'company', '${ids.vedanshu}', '8002');
     insert into public.expenses (id, event_id, category, description, amount_paise, created_by) values
-      ('${ids.expenseSound}', '${ids.eventFriday}', 'Sound', 'DJ', 800000, '${ids.vedanshu}');
+      ('${ids.expenseSound}', '${ids.eventFriday}', 'Sound', 'DJ', 800000, '${ids.vedanshu}'),
+      ('50000000-0000-4000-8000-000000000099', '${ids.eventCollab}', 'Venue', 'private note about Aisha', 1000, '${ids.vedanshu}');
     insert into public.settlements (event_id, snapshot, created_by) values
       ('${ids.eventFriday}', '{"profitPaise":1}', '${ids.vedanshu}');
   `);
@@ -124,6 +126,39 @@ describe("row level security", () => {
     await asUser(ids.kabir);
     const secrets = await db.query(`select phone_ciphertext, upi_ciphertext from public.profile_secrets`);
     expect(secrets.rows).toHaveLength(0);
+  });
+
+  it("lets a ticketing partner open an event they are on", async () => {
+    await asUser(ids.boxoffice);
+    const events = await db.query<{ name: string }>(`select name from public.events order by name`);
+    expect(events.rows.map((row) => row.name)).toEqual(["Warehouse Friday"]);
+  });
+
+  it("lets a collab partner log only their own side", async () => {
+    await asUser(ids.northline);
+    await expect(db.query(
+      `select public.rvt_log_sale(
+        '${ids.eventCollab}', 'Nope', '${ids.ttCollabMale}', null, 'rvt', null,
+        null, null, '1212', '', null, null, 'company', 'manual', false
+      )`,
+    )).rejects.toThrow(/forbidden/i);
+    const created = await db.query<{ rvt_log_sale: string }>(
+      `select public.rvt_log_sale(
+        '${ids.eventCollab}', 'Neel Guest', '${ids.ttCollabMale}', null, 'collab', 'Neel Varghese',
+        null, null, '3434', '', null, null, 'company', 'manual', false
+      )`,
+    );
+    await asSuper();
+    const row = await db.query<{ side: string; collab_partner_id: string; pr_id: string | null }>(
+      `select side, collab_partner_id, pr_id from public.sales where id = '${created.rows[0].rvt_log_sale}'`,
+    );
+    expect(row.rows[0]).toMatchObject({ side: "collab", collab_partner_id: ids.northline, pr_id: null });
+    await asUser(ids.northline);
+    await expect(db.exec(`update public.sales set notes = 'nope' where id = '${ids.saleCollabRvt}'`)).rejects.toThrow(/permission denied|42501/i);
+    await expect(db.query(`select description from public.expenses`)).rejects.toThrow(/permission denied|42501/i);
+    const notes = await db.query<{ description: string }>(`select description from public.expense_rows where event_id = '${ids.eventCollab}'`);
+    expect(notes.rows.map((item) => item.description)).toEqual([""]);
+    expect(JSON.stringify(notes.rows)).not.toMatch(/Aisha/);
   });
 
   it("lets an admin read both PRs", async () => {

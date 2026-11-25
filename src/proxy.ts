@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { canAccessPath, homeFor } from "@/domain/paths";
 import type { Role, Status } from "@/domain/types";
 import { createServerClient } from "@supabase/ssr";
+import { contentSecurityPolicy } from "@/server/csp";
 import { csrfToken, cookieBase, idleMs, readSession, seenAgeMs } from "@/server/session";
 
 const PUBLIC = [
@@ -22,11 +23,25 @@ function isPublic(path: string): boolean {
   return PUBLIC.some((item) => path === item) || path.startsWith("/brand/") || path.startsWith("/icons/");
 }
 
+function secureResponse(response: NextResponse, csp: string): NextResponse {
+  response.headers.set("Content-Security-Policy", csp);
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  const dev = process.env.NODE_ENV === "development";
+  const nonce = btoa(crypto.randomUUID());
+  const csp = contentSecurityPolicy({
+    dev,
+    https: request.nextUrl.protocol === "https:",
+    nonce,
+  });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-rvt-path", path);
-  let response = NextResponse.next({ request: { headers: requestHeaders } });
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+  let response = secureResponse(NextResponse.next({ request: { headers: requestHeaders } }), csp);
 
   if (!request.cookies.get("rvt_csrf")) {
     response.cookies.set("rvt_csrf", csrfToken(), {
@@ -38,7 +53,7 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  if (isPublic(path)) return response;
+  if (isPublic(path)) return secureResponse(response, csp);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -55,7 +70,7 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request: { headers: requestHeaders } });
+          response = secureResponse(NextResponse.next({ request: { headers: requestHeaders } }), csp);
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
       },
@@ -83,25 +98,29 @@ export async function proxy(request: NextRequest) {
     redirect.cookies.delete("rvt_role");
     redirect.cookies.delete("rvt_status");
     redirect.cookies.delete("rvt_seen");
-    return redirect;
+    return secureResponse(redirect, csp);
   }
 
   if (!userId || !role || status === "disabled") {
-    if (path.startsWith("/api/")) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    if (path.startsWith("/api/")) return secureResponse(NextResponse.json({ error: "Sign in required" }, { status: 401 }), csp);
     const login = new URL("/login", request.url);
     login.searchParams.set("next", path);
-    return NextResponse.redirect(login);
+    return secureResponse(NextResponse.redirect(login), csp);
   }
 
   if (!canAccessPath({ role, status }, path)) {
     const dest = status === "pending" ? "/pending" : homeFor(role);
-    if (path.startsWith("/api/")) return NextResponse.json({ error: "You can't do that" }, { status: 403 });
-    return NextResponse.redirect(new URL(dest, request.url));
+    if (path.startsWith("/api/") || path.startsWith("/data")) {
+      return secureResponse(NextResponse.json({ error: "You can't do that" }, { status: 403 }), csp);
+    }
+    return secureResponse(NextResponse.redirect(new URL(dest, request.url)), csp);
   }
 
-  return response;
+  return secureResponse(response, csp);
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Leave Next's dev socket and static assets alone. Redirecting /_next/hmr
+  // to login stops Turbopack from booting the page, so nothing is clickable.
+  matcher: ["/((?!_next/|__nextjs|favicon.ico).*)"],
 };

@@ -9,6 +9,7 @@ import {
   eventSchema,
   expenseSchema,
   logSaleSchema,
+  reviewCompSchema,
   staffSchema,
   statusSchema,
 } from "@/domain/schemas";
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
     assertCsrf(request);
     const actor = await currentActor();
     if (!actor || actor.status !== "active") throw new AppError(401, "Sign in required");
-    await hitLimit(`api:${actor.id}`, 120, 60 * 1000);
+    const cap = actor.role === "door" ? 2000 : 120;
+    await hitLimit(`api:${actor.id}`, cap, 60 * 1000);
     const body = bodySchema.parse(await readJson(request));
     const store = await getStore();
     const payload = body.payload ?? {};
@@ -59,7 +61,7 @@ export async function POST(request: Request) {
         return reviewSale(actor, input.id, input.decision, store);
       }
       case "reviewComp": {
-        const input = z.object({ id: z.uuid(), decision: z.enum(["approved", "rejected"]) }).parse(payload);
+        const input = reviewCompSchema.parse(payload);
         return reviewComp(actor, input.id, input.decision, store);
       }
       case "checkIn":

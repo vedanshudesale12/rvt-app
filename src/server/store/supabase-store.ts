@@ -52,6 +52,14 @@ function mapEvent(row: Row): EventRow {
     settledAt: (row.settled_at as string | null) ?? null,
     createdBy: (row.created_by as string | null) ?? null,
     deletedAt: (row.deleted_at as string | null) ?? null,
+    kind: row.kind ? (String(row.kind) as EventRow["kind"]) : undefined,
+    capacity: row.capacity == null ? null : Number(row.capacity),
+    minAge: row.min_age == null ? undefined : Number(row.min_age),
+    alcohol: row.alcohol == null ? undefined : Boolean(row.alcohol),
+    guardianRequired: row.guardian_required == null ? undefined : Boolean(row.guardian_required),
+    waitlistCount: row.waitlist_count == null ? undefined : Number(row.waitlist_count),
+    postponedTo: (row.postponed_to as string | null) ?? null,
+    collabShares: Array.isArray(row.collab_shares) ? (row.collab_shares as EventRow["collabShares"]) : undefined,
   };
 }
 
@@ -79,6 +87,9 @@ function mapSale(row: Row): Sale {
     phoneLast4: String(row.phone_last4 ?? ""),
     createdAt: String(row.created_at),
     deletedAt: (row.deleted_at as string | null) ?? null,
+    paymentMethod: row.payment_method as Sale["paymentMethod"],
+    checkInCode: (row.check_in_code as string | null) ?? undefined,
+    collabPartnerId: (row.collab_partner_id as string | null) ?? null,
   };
 }
 
@@ -133,7 +144,7 @@ export function createSupabaseStore(): Store {
     },
     async expenses() {
       const supabase = await createUserClient();
-      const { data, error } = await supabase.from("expenses").select("*");
+      const { data, error } = await supabase.from("expense_rows").select("*");
       fail(error);
       return (data ?? []).map((row) => ({
         id: String(row.id),
@@ -251,6 +262,9 @@ export function createSupabaseStore(): Store {
       } else if (!sale.isComp && sale.status !== existing.data.status && (sale.status === "verified" || sale.status === "rejected")) {
         const { error } = await supabase.rpc("rvt_review_sale", { p_id: sale.id, p_decision: sale.status });
         fail(error);
+      } else if (sale.status === "refunded" && existing.data.status !== "refunded") {
+        const { error } = await supabase.rpc("rvt_refund_sale", { p_id: sale.id });
+        fail(error);
       }
       const loaded = await supabase.from("sales").select("*").eq("id", sale.id).single();
       fail(loaded.error);
@@ -287,6 +301,14 @@ export function createSupabaseStore(): Store {
         collab_brand: event.collabBrand,
         collab_partner_id: event.collabPartnerId,
         collab_split_bps: event.collabSplitBps,
+        collab_shares: event.collabShares ?? [],
+        kind: event.kind ?? "club_night",
+        capacity: event.capacity ?? null,
+        min_age: event.minAge ?? 18,
+        alcohol: event.alcohol ?? true,
+        guardian_required: event.guardianRequired ?? false,
+        waitlist_count: event.waitlistCount ?? 0,
+        postponed_to: event.postponedTo ?? null,
         settled_at: event.settledAt,
         created_by: event.createdBy,
         deleted_at: event.deletedAt,
@@ -319,6 +341,7 @@ export function createSupabaseStore(): Store {
           profile_id: row.profileId,
           side: row.side,
           commission_paise: row.commissionPaise,
+          commission_bps: row.commissionBps ?? null,
         })),
       );
       fail(error);

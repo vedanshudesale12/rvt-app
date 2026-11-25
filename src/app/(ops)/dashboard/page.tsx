@@ -1,4 +1,4 @@
-import { Bars, Split } from "@/components/charts";
+import { Bars, Split, Trend } from "@/components/charts";
 import { inr } from "@/domain/money";
 import { dashboard } from "@/server/ops";
 import { loadPage } from "@/server/page";
@@ -27,6 +27,10 @@ export default async function DashboardPage() {
           RVT team · <span className="num">{view.rvtTeam.tickets}</span> verified · {inr(view.rvtTeam.amountPaise)}
         </p>
       )}
+      <section className="border border-line bg-panel p-4">
+        <h2 className="display mb-4 text-2xl">Sales</h2>
+        <Trend points={view.salesOverTime} />
+      </section>
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="border border-line bg-panel p-4">
           <h2 className="display mb-4 text-2xl">By ticket</h2>

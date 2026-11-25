@@ -10,7 +10,7 @@ const PAGE_ROLES: { test: (path: string) => boolean; roles: Role[]; home?: strin
   { test: (p) => p.startsWith("/leaderboard"), roles: ["admin", "pr", "ticketing_partner"] },
   { test: (p) => p.startsWith("/events"), roles: ["admin", "pr", "data_entry", "collab_partner", "ticketing_partner"] },
   { test: (p) => p.startsWith("/ticketing"), roles: ["admin", "ticketing_partner"] },
-  { test: (p) => p.startsWith("/people") || p.startsWith("/audit"), roles: ["admin"] },
+  { test: (p) => p.startsWith("/people") || p.startsWith("/audit") || p.startsWith("/data"), roles: ["admin"] },
   { test: (p) => p.startsWith("/account") || p.startsWith("/pending"), roles: ["admin", "pr", "data_entry", "door", "ticketing_partner", "collab_partner"] },
 ];
 
@@ -47,6 +47,7 @@ export function navFor(role: Role): NavItem[] {
     { href: "/leaderboard", label: "Leaderboard", roles: ["admin", "pr", "ticketing_partner"] },
     { href: "/events", label: "Events", roles: ["admin", "pr", "data_entry", "collab_partner", "ticketing_partner"] },
     { href: "/ticketing", label: "Ticketing", roles: ["admin", "ticketing_partner"] },
+    { href: "/data", label: "Data", roles: ["admin"] },
     { href: "/people", label: "People", roles: ["admin"] },
     { href: "/audit", label: "Audit", roles: ["admin"] },
   ];

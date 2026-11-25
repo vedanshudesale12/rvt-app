@@ -62,7 +62,7 @@ describe("PR isolation", () => {
     expect(() => resolveLogger(actor(ids.aisha), ids.kabir, "rvt")).toThrow(/own guests/);
     const saved = await logSale(
       actor(ids.aisha),
-      { eventId: ids.eventFriday, guestName: "New Guest", phone: "9876543210", ticketTypeId: ids.ttMale },
+      { eventId: ids.eventFriday, guestName: "New Guest", phone: "9876543210", ticketTypeId: ids.ttMale, ageConfirmed: true as const },
       store(),
     );
     expect(saved.amountPaise).toBe(150000);
@@ -143,8 +143,8 @@ describe("settle-up math", () => {
     expect(odd.vedanshuPaise).toBe(51);
     expect(odd.rishabPaise).toBe(50);
     const view = await settlementView(actor(ids.vedanshu), store(), ids.eventFriday);
-    expect(view.profitPaise).toBe(655000);
-    expect(view.vedanshuPaise).toBe(327500);
+    expect(view.profitPaise).toBe(645000);
+    expect(view.vedanshuPaise).toBe(322500);
     expect(view.prLines?.find((line) => line.name === "Aisha Kulkarni")?.dueToCompanyPaise).toBe(210000);
   });
 });

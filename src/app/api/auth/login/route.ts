@@ -14,7 +14,8 @@ import { verifyTurnstile } from "@/server/turnstile";
 export async function POST(request: Request) {
   return handle(async () => {
     assertCsrf(request);
-    await hitLimit(`login:${clientIp(request)}`, 8, 15 * 60 * 1000);
+    const loginCap = process.env.NODE_ENV === "production" ? 10 : 200;
+    await hitLimit(`login:${clientIp(request)}`, loginCap, 15 * 60 * 1000);
     const input = loginSchema.parse(await readJson(request));
     await verifyTurnstile(input.turnstileToken, clientIp(request));
     const jar = await cookies();

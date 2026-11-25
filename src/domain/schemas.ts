@@ -38,6 +38,7 @@ export const logSaleSchema = z.strictObject({
   ticketingPartnerId: z.uuid().optional(),
   collectedBy: z.enum(["pr", "company", "ticketing_partner"]).optional(),
   proofPath: z.string().max(200).optional(),
+  ageConfirmed: z.literal(true),
 });
 
 export const bulkSaleSchema = z.strictObject({
@@ -49,6 +50,7 @@ export const bulkSaleSchema = z.strictObject({
       ticketTypeId: z.uuid(),
     }),
   ).min(1).max(200),
+  ageConfirmed: z.literal(true),
 });
 
 export const compSchema = z.strictObject({
@@ -58,10 +60,16 @@ export const compSchema = z.strictObject({
   ticketTypeId: z.uuid(),
   notes: z.string().max(500).optional(),
   prId: z.uuid().optional(),
+  ageConfirmed: z.literal(true),
 });
 
 export const reviewSchema = z.strictObject({
   decision: z.enum(["verified", "rejected", "approved"]),
+});
+
+export const reviewCompSchema = z.strictObject({
+  id: z.uuid(),
+  decision: z.enum(["approved", "rejected"]),
 });
 
 export const expenseSchema = z.strictObject({
@@ -78,7 +86,11 @@ export const eventSchema = z.strictObject({
   eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   venue: z.string().trim().min(1).max(160),
   time: z.string().regex(/^\d{2}:\d{2}$/),
-  status: z.enum(["draft", "published", "live", "settled"]),
+  status: z.enum(["draft", "published", "live", "settled", "cancelled", "postponed"]),
+  kind: z.string().trim().max(40).optional(),
+  capacity: z.number().int().min(0).nullable().optional(),
+  minAge: z.literal(18).optional(),
+  postponedTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   prCommissionRupees: money,
   barRevenueRupees: money,
   barSplitPercent: z.number().min(0).max(100),
@@ -92,9 +104,20 @@ export const eventSchema = z.strictObject({
       id: z.uuid().optional(),
       name: name,
       priceRupees: money,
+      saleEndsAt: z.string().datetime().nullable().optional(),
     }),
   ).min(1).max(12),
   prIds: z.array(z.uuid()).max(200),
+  ticketingPartners: z.array(z.strictObject({
+    id: z.uuid(),
+    flatRupees: money,
+    percent: z.number().min(0).max(100).nullable().optional(),
+  })).max(20).optional(),
+  collabPartners: z.array(z.strictObject({
+    id: z.uuid(),
+    brand: z.string().trim().max(120),
+    splitPercent: z.number().min(0).max(100),
+  })).max(8).optional(),
 });
 
 export const staffSchema = z.strictObject({
