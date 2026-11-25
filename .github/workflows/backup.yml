@@ -4,16 +4,25 @@ on:
   schedule:
     - cron: "0 3 * * 0"
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   dump:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
-      - run: bash scripts/backup.sh
+      - name: Dump the database
         env:
           BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          if [ -z "$BACKUP_DATABASE_URL" ]; then
+            echo "BACKUP_DATABASE_URL is not set yet. Skipping."
+            exit 0
+          fi
+          bash scripts/backup.sh
       - uses: actions/upload-artifact@v4
         with:
           name: db-backup

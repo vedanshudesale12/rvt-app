@@ -4,13 +4,21 @@ on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
+  push:
+    branches: [main]
 
 jobs:
   ping:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Ping Supabase through the app
-        run: curl --fail --silent --show-error -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/keepalive"
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_URL: ${{ secrets.APP_URL }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET is not set yet. Skipping."
+            exit 0
+          fi
+          curl --fail --silent --show-error -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/keepalive"
