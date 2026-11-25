@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Archivo Narrow", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+  --color-ink: #f3f3ee;
+  --color-paper: #121212;
+  --color-panel: #1c1c1c;
+  --color-line: #6e6e6e;
+  --color-muted: #c8c8c0;
+  --color-invert: #0c0c0c;
+  --color-invert-muted: #c8c8c0;
+  --color-accent: #4b1494;
+  --color-danger: #e7b4b4;
+  --color-ok: #9dceb0;
+  --radius-sm: 2px;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: clip;
+}
+
+button,
+[type="submit"] {
+  min-height: 44px;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.btn-solid {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted);
+  opacity: 1;
+}
+
+a {
+  color: inherit;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
