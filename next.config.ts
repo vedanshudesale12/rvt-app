@@ -24,7 +24,14 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ["web-push"],
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    const immutable = [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }];
+    const day = [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }];
+    return [
+      { source: "/_next/static/:path*", headers: [...securityHeaders, ...immutable] },
+      { source: "/icons/:path*", headers: [...securityHeaders, ...day] },
+      { source: "/brand/:path*", headers: [...securityHeaders, ...day] },
+      { source: "/:path*", headers: securityHeaders },
+    ];
   },
 };
 

@@ -106,6 +106,12 @@ export function createSupabaseStore(): Store {
       fail(error);
       return (data ?? []).map((row) => mapProfile(row as Row));
     },
+    async profileById(id) {
+      const supabase = await createUserClient();
+      const { data, error } = await supabase.from("profiles").select("*, profile_private(*), profile_secrets(phone_last4)").eq("id", id).maybeSingle();
+      fail(error);
+      return data ? mapProfile(data as Row) : null;
+    },
     async events() {
       const supabase = await createUserClient();
       const { data, error } = await supabase.from("events").select("*");

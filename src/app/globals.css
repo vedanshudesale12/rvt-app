@@ -39,6 +39,11 @@ button, input, select, textarea {
   color: inherit;
 }
 
+.btn-solid {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--color-muted);

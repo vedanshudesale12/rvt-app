@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import { APP } from "@/config/brand";
 import { SiteFooter } from "@/components/footer";
 import { Logo } from "@/components/logo";
+import { Turnstile } from "@/components/bits";
 import { api } from "@/components/use-api";
 
 export default function SignupPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [agreed, setAgreed] = useState(false);
+  const [turnstileReset, setTurnstileReset] = useState(0);
   return (
     <main className="min-h-screen bg-paper px-4 py-8">
       <form
@@ -33,7 +35,7 @@ export default function SignupPage() {
               const saved = await api("/api/uploads", undefined, upload);
               photoPath = saved.path;
             }
-            const token = document.querySelector<HTMLTextAreaElement>("[name=cf-turnstile-response]")?.value;
+            const token = String(form.get("cf-turnstile-response") || "");
             const result = await api("/api/auth/signup", {
               fullName: form.get("fullName"),
               phone: form.get("phone"),
@@ -53,6 +55,7 @@ export default function SignupPage() {
             router.refresh();
           } catch (err) {
             setError(err instanceof Error ? err.message : "Could not sign up");
+            setTurnstileReset((count) => count + 1);
           }
         }}
       >
@@ -81,9 +84,9 @@ export default function SignupPage() {
           </span>
         </label>
         <p className="text-xs text-muted">Essential cookies only: session, security token, and the event you have open. No ad cookies.</p>
-        <div className="cf-turnstile" data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""} />
+        <Turnstile resetSignal={turnstileReset} />
         {error && <p className="text-sm text-danger">{error}</p>}
-        <button type="submit" className="bg-ink px-4 py-2 text-paper">Create login</button>
+        <button type="submit" className="btn-solid px-4 py-2">Create login</button>
         <Link href="/login" className="inline-flex min-h-11 items-center text-sm underline">I already have a login</Link>
       </form>
       <SiteFooter />

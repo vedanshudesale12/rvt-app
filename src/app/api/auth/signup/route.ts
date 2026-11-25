@@ -14,9 +14,12 @@ import { cleanText, last4, normalizePhone } from "@/domain/text";
 export async function POST(request: Request) {
   return handle(async () => {
     assertCsrf(request);
-    await hitLimit(`signup:${clientIp(request)}`, 5, 60 * 60 * 1000);
     const input = signupSchema.parse(await readJson(request));
-    await verifyTurnstile(input.turnstileToken, clientIp(request));
+    const ip = clientIp(request);
+    await Promise.all([
+      hitLimit(`signup:${ip}`, 5, 60 * 60 * 1000),
+      verifyTurnstile(input.turnstileToken, ip),
+    ]);
     const jar = await cookies();
     if (supabaseConfigured()) {
       const admin = createAdminClient();

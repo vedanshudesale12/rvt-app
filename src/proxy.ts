@@ -53,6 +53,7 @@ export async function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-rvt-path", path);
   requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("x-rvt-user-id", "");
   requestHeaders.set("Content-Security-Policy", csp);
   let response = secureResponse(NextResponse.next({ request: { headers: requestHeaders } }), csp);
 
@@ -131,7 +132,10 @@ export async function proxy(request: NextRequest) {
     return secureResponse(NextResponse.redirect(new URL(dest, request.url)), csp);
   }
 
-  return secureResponse(response, csp);
+  requestHeaders.set("x-rvt-user-id", userId ?? "");
+  const passed = secureResponse(NextResponse.next({ request: { headers: requestHeaders } }), csp);
+  for (const cookie of response.cookies.getAll()) passed.cookies.set(cookie);
+  return passed;
 }
 
 export const config = {

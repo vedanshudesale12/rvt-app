@@ -29,7 +29,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en">
       <head>
         {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? (
-          <script nonce={nonce} src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer />
+          <script nonce={nonce} src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer />
         ) : null}
       </head>
       <body>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP } from "@/config/brand";
 import { api } from "@/components/use-api";
 
@@ -31,10 +31,74 @@ export function CookieNotice() {
   );
 }
 
-export function Turnstile() {
+type TurnstileAPI = {
+  render: (el: HTMLElement, options: Record<string, unknown>) => string;
+  remove: (id: string) => void;
+  reset: (id?: string) => void;
+};
+
+declare global {
+  interface Window {
+    turnstile?: TurnstileAPI;
+  }
+}
+
+/** Explicit Turnstile render so a cached api.js cannot scan and then lose the widget on hydrate. */
+export function Turnstile({ resetSignal = 0 }: { resetSignal?: number }) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const host = useRef<HTMLDivElement>(null);
+  const widgetId = useRef<string | null>(null);
+  const [token, setToken] = useState("");
+
+  useEffect(() => {
+    if (!siteKey) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const tryRender = (): boolean => {
+      const api = window.turnstile;
+      const el = host.current;
+      if (cancelled || !api || !el || widgetId.current) return Boolean(widgetId.current);
+      widgetId.current = api.render(el, {
+        sitekey: siteKey,
+        theme: "dark",
+        callback: (value: string) => setToken(value),
+        "expired-callback": () => setToken(""),
+        "error-callback": () => setToken(""),
+      });
+      return true;
+    };
+
+    if (!tryRender()) {
+      timer = window.setInterval(() => {
+        if (tryRender() && timer) window.clearInterval(timer);
+      }, 50);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) window.clearInterval(timer);
+      const id = widgetId.current;
+      widgetId.current = null;
+      setToken("");
+      if (id && window.turnstile) window.turnstile.remove(id);
+    };
+  }, [siteKey]);
+
+  useEffect(() => {
+    if (!resetSignal) return;
+    setToken("");
+    const id = widgetId.current;
+    if (id && window.turnstile) window.turnstile.reset(id);
+  }, [resetSignal]);
+
   if (!siteKey) return null;
-  return <div className="cf-turnstile" data-sitekey={siteKey} />;
+  return (
+    <>
+      <div ref={host} className="cf-turnstile" />
+      <input type="hidden" name="cf-turnstile-response" value={token} readOnly />
+    </>
+  );
 }
 
 export function IdleNote() {

@@ -23,6 +23,7 @@ export type StoredFile = { bytes: Uint8Array; type: string; ownerId: string };
 export interface Store {
   mode: "memory" | "supabase";
   profiles(): Promise<Profile[]>;
+  profileById(id: string): Promise<Profile | null>;
   events(): Promise<EventRow[]>;
   tickets(): Promise<TicketType[]>;
   assignments(): Promise<Assignment[]>;

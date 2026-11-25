@@ -48,6 +48,10 @@ export function createMemoryStore(seed: MemorySeed): Store {
     async profiles() {
       return [...profiles.values()].filter((row) => !row.deletedAt);
     },
+    async profileById(id) {
+      const row = profiles.get(id);
+      return row && !row.deletedAt ? row : null;
+    },
     async events() {
       return [...events.values()].filter((row) => !row.deletedAt);
     },

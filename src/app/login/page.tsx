@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { APP } from "@/config/brand";
 import { SiteFooter } from "@/components/footer";
 import { Logo } from "@/components/logo";
+import { Turnstile } from "@/components/bits";
 import { api } from "@/components/use-api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState("");
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const demo = process.env.NEXT_PUBLIC_SUPABASE_URL ? false : process.env.NODE_ENV !== "production";
   return (
     <main className="flex min-h-screen flex-col bg-invert px-4 py-10 text-ink">
@@ -23,7 +25,7 @@ export default function LoginPage() {
           onSubmit={async (event) => {
             event.preventDefault();
             const form = new FormData(event.currentTarget);
-            const token = document.querySelector<HTMLTextAreaElement>("[name=cf-turnstile-response]")?.value;
+            const token = String(form.get("cf-turnstile-response") || "");
             try {
               const result = await api("/api/auth/login", {
                 email: form.get("email"),
@@ -34,14 +36,15 @@ export default function LoginPage() {
               router.refresh();
             } catch (err) {
               setError(err instanceof Error ? err.message : "Could not sign in");
+              setTurnstileReset((count) => count + 1);
             }
           }}
         >
           <input name="email" type="email" required placeholder="Email" className="border border-invert-muted bg-invert px-3 py-2" />
           <input name="password" type="password" required minLength={8} placeholder="Password" className="border border-invert-muted bg-invert px-3 py-2" />
-          <div className="cf-turnstile" data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""} />
+          <Turnstile resetSignal={turnstileReset} />
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-          <button type="submit" className="bg-ink px-4 py-2 text-paper">Log in</button>
+          <button type="submit" className="btn-solid px-4 py-2">Log in</button>
         </form>
         <p className="mt-4 text-sm"><Link href="/signup" className="underline">Request a login</Link></p>
         {demo && (

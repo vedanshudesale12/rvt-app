@@ -28,6 +28,7 @@
     "@opennextjs/cloudflare": "^1.20.18",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
+    "cookie": "^0.7.2",
     "next": "^16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
@@ -37,7 +38,8 @@
   "overrides": {
     "@opennextjs/cloudflare": {
       "glob": "14.0.6"
-    }
+    },
+    "cookie": "0.7.2"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.1",

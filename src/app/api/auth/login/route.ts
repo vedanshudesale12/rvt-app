@@ -15,23 +15,25 @@ export async function POST(request: Request) {
   return handle(async () => {
     assertCsrf(request);
     const loginCap = process.env.NODE_ENV === "production" ? 40 : 500;
-    await hitLimit(`login-ip:${clientIp(request)}`, loginCap, 15 * 60 * 1000);
     const input = loginSchema.parse(await readJson(request));
     if (overLimit(`login-fail:${input.email.toLowerCase()}`, 8, 15 * 60 * 1000)) {
       throw new AppError(429, "Too many tries. Wait a minute and try again.");
     }
-    await verifyTurnstile(input.turnstileToken, clientIp(request));
+    const ip = clientIp(request);
+    await Promise.all([
+      hitLimit(`login-ip:${ip}`, loginCap, 15 * 60 * 1000),
+      verifyTurnstile(input.turnstileToken, ip),
+    ]);
     const jar = await cookies();
     if (supabaseConfigured()) {
       const supabase = await createUserClient();
-      const { error } = await supabase.auth.signInWithPassword({ email: input.email, password: input.password });
-      if (error) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: input.email, password: input.password });
+      if (error || !data.user) {
         await hitLimit(`login-fail:${input.email.toLowerCase()}`, 8, 15 * 60 * 1000);
         throw new AppError(401, "Email or password is wrong");
       }
-      const { data } = await supabase.auth.getUser();
       const store = await getStore();
-      const profile = (await store.profiles()).find((row) => row.id === data.user?.id);
+      const profile = await store.profileById(data.user.id);
       const actor = profile ? toActor(profile) : null;
       if (!actor) throw new AppError(403, "This login is turned off");
       jar.set("rvt_seen", await sealSeen(), { ...cookieBase(), maxAge: 60 * 60 * 12 });
