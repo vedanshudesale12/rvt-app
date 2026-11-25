@@ -10,7 +10,7 @@ export default async function DoorPage() {
   return (
     <div className="grid gap-4">
       <div className="flex items-center gap-3">
-        <Logo lockup className="h-auto w-36" />
+        <Logo lockup href="/door" className="h-auto w-36" />
         <div>
           <h1 className="display text-3xl">{event.name}</h1>
           <p className="text-sm text-muted">{event.venue}</p>

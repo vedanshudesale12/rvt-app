@@ -53,23 +53,29 @@ export function ActionButton({
   danger?: boolean;
 }) {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   return (
     <form
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
+        setBusy(true);
         try {
           await api("/api/rpc", { action, payload });
-          window.location.reload();
+          setSaved(true);
+          window.setTimeout(() => window.location.reload(), 500);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Failed");
+          setBusy(false);
+          setError(err instanceof Error ? err.message : "That didn't work. Try again.");
         }
       }}
     >
-      <button type="submit" className={`border px-2 py-1 text-sm ${danger ? "border-danger text-danger" : "border-ink"}`}>
-        {label}
+      <button type="submit" disabled={busy} className={`border px-3 text-sm disabled:opacity-60 ${danger ? "border-danger text-danger" : "border-ink"}`}>
+        {busy ? "Saving…" : label}
       </button>
-      {error && <span className="ml-2 text-sm text-danger">{error}</span>}
+      {saved && <span role="status" className="ml-2 text-sm">Saved.</span>}
+      {error && <span role="alert" className="ml-2 text-sm text-danger">{error}</span>}
     </form>
   );
 }

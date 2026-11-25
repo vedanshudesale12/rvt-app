@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { APP } from "@/config/brand";
 import { Logo } from "@/components/logo";
+import { SiteFooter } from "@/components/footer";
 import { api } from "@/components/use-api";
 import type { NavItem } from "@/domain/paths";
 
@@ -31,6 +32,8 @@ export function Shell({
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [leaveError, setLeaveError] = useState("");
   const [banner, setBanner] = useState<Note | null>(notices[0] ?? null);
 
   useEffect(() => {
@@ -74,13 +77,13 @@ export function Shell({
     <div className="min-h-screen bg-paper text-ink md:grid md:grid-cols-[232px_1fr]">
       <aside className={`${open ? "block" : "hidden"} border-b border-line bg-invert text-ink md:block md:min-h-screen md:border-b-0 md:border-r`}>
         <div className="flex items-center gap-3 px-4 py-4">
-          <Logo className="h-10 w-10" />
+          <Logo href={door ? "/door" : "/dashboard"} className="h-10 w-10" />
           <div>
             <p className="display text-lg leading-none">{APP.shortName}</p>
             <p className="mt-1 text-[11px] uppercase tracking-[0.16em] text-invert-muted">{APP.org}</p>
           </div>
         </div>
-        <nav className="flex flex-col">
+        <nav id="app-nav" className="flex flex-col">
           {nav.map((item) => {
             const active = path === item.href || path.startsWith(`${item.href}/`);
             return (
@@ -88,7 +91,7 @@ export function Shell({
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className={`border-l-2 px-4 py-3 text-sm ${active ? "border-ink bg-accent text-ink" : "border-transparent text-invert-muted"}`}
+                className={`inline-flex min-h-11 items-center border-l-2 px-4 py-3 text-sm ${active ? "border-ink bg-accent text-ink" : "border-transparent text-invert-muted"}`}
               >
                 {item.label}
               </Link>
@@ -98,7 +101,13 @@ export function Shell({
       </aside>
       <div className="min-w-0">
         <header className="flex items-center gap-3 border-b border-line bg-panel px-4 py-3">
-          <button type="button" className="border border-ink px-2 py-1 text-sm md:hidden" onClick={() => setOpen((value) => !value)}>
+          <button
+            type="button"
+            className="min-w-11 border border-ink px-3 text-sm md:hidden"
+            aria-expanded={open}
+            aria-controls="app-nav"
+            onClick={() => setOpen((value) => !value)}
+          >
             Menu
           </button>
           {!door && events.length > 0 && (
@@ -121,21 +130,29 @@ export function Shell({
             </label>
           )}
           {door && <p className="display flex-1 text-xl">Door</p>}
-          <div className="text-right text-sm">
-            <p className="font-medium">{name}</p>
+          <div className="min-w-0 text-right text-sm">
+            <p className="truncate font-medium">{name}</p>
             <p className="text-xs uppercase tracking-wider text-muted">{roleLabel}</p>
           </div>
           <button
             type="button"
-            className="border border-ink px-3 py-2 text-sm"
+            disabled={leaving}
+            className="border border-ink px-3 text-sm disabled:opacity-60"
             onClick={async () => {
-              await api("/api/auth/logout");
-              router.push("/login");
-              router.refresh();
+              setLeaving(true);
+              try {
+                await api("/api/auth/logout");
+                router.push("/login");
+                router.refresh();
+              } catch (err) {
+                setLeaving(false);
+                setLeaveError(err instanceof Error ? err.message : "Could not log out. Try again.");
+              }
             }}
           >
-            Log out
+            {leaving ? "Signing out…" : "Log out"}
           </button>
+          {leaveError && <p role="alert" className="text-sm text-danger">{leaveError}</p>}
         </header>
         {banner && (
           <div className="flex items-start justify-between gap-4 border-b border-line bg-panel px-4 py-3">
@@ -155,7 +172,8 @@ export function Shell({
             </button>
           </div>
         )}
-        <main className={door ? "p-3" : "p-4 md:p-6"}>{children}</main>
+        <main className={`min-w-0 ${door ? "p-3" : "p-4 md:p-6"}`}>{children}</main>
+        <SiteFooter />
       </div>
     </div>
   );

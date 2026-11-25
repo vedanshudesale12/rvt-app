@@ -14,8 +14,8 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     <div className="grid gap-4">
       <h1 className="display text-4xl">Compare</h1>
       <form className="flex flex-wrap gap-3" action="/events/compare">
-        <select name="a" defaultValue={a} className="border border-line bg-panel px-2 py-2">{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
-        <select name="b" defaultValue={b} className="border border-line bg-panel px-2 py-2">{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
+        <select name="a" aria-label="First event" defaultValue={a} className="border border-line bg-panel px-2 py-2">{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
+        <select name="b" aria-label="Second event" defaultValue={b} className="border border-line bg-panel px-2 py-2">{events.map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select>
         <button className="border border-ink px-3 py-2">Show</button>
       </form>
       {result && (

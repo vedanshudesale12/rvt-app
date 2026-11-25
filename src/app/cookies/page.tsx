@@ -1,7 +1,10 @@
 import { APP } from "@/config/brand";
 import { Legal } from "@/components/legal";
 
-export const metadata = { title: "Cookies" };
+export const metadata = {
+  title: "Cookies",
+  description: "Backstage uses essential cookies only: session, security token, and the open event.",
+};
 
 export default function CookiesPage() {
   return (

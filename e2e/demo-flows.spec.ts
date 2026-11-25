@@ -45,6 +45,10 @@ async function pickFriday(page: Page) {
   }
 }
 
+test.beforeEach(({}, info) => {
+  test.skip(info.project.name !== "chromium-desktop", "the acceptance suite covers the other browsers");
+});
+
 test("dev server accepts the LAN origin", async ({ request }) => {
   const blocked = await request.get("/_next/hmr", {
     headers: { origin: "http://192.168.1.5:3000" },

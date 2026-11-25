@@ -1,7 +1,10 @@
 import { APP } from "@/config/brand";
 import { Legal } from "@/components/legal";
 
-export const metadata = { title: "Terms" };
+export const metadata = {
+  title: "Terms",
+  description: "Staff terms for Backstage. 18 or older. Internal use for Riot Vibe Theory.",
+};
 
 export default function TermsPage() {
   return (

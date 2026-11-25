@@ -10,6 +10,8 @@ type Pr = { id: string; fullName: string };
 
 export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { eventId: string; tickets: Ticket[]; prs: Pr[]; showPr: boolean; collabName?: string }) {
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [side, setSide] = useState("rvt");
   return (
     <form
@@ -17,6 +19,7 @@ export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { event
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
+        setBusy(true);
         const form = new FormData(event.currentTarget);
         try {
           let proofPath: string | undefined;
@@ -45,9 +48,11 @@ export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { event
               ageConfirmed: form.get("age") === "on" ? true : undefined,
             },
           });
-          window.location.reload();
+          setSaved(true);
+          window.setTimeout(() => window.location.reload(), 400);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Could not save");
+          setBusy(false);
+          setError(err instanceof Error ? err.message : "Could not save that guest. Check the form and try again.");
         }
       }}
     >
@@ -55,26 +60,26 @@ export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { event
       <div className="grid gap-3 md:grid-cols-2">
         <input name="guestName" required placeholder="Name" className="border border-line px-3 py-2" />
         <input name="phone" required placeholder="Phone" className="border border-line px-3 py-2" />
-        <select name="ticketTypeId" className="border border-line px-3 py-2" defaultValue={tickets[0]?.id}>
+        <select name="ticketTypeId" aria-label="Ticket" className="border border-line px-3 py-2" defaultValue={tickets[0]?.id}>
           {tickets.map((ticket) => (
             <option key={ticket.id} value={ticket.id}>{ticket.name}</option>
           ))}
         </select>
         {showPr && !collabName && side === "rvt" && (
-          <select name="prId" className="border border-line px-3 py-2" defaultValue={prs[0]?.id}>
+          <select name="prId" aria-label="PR" className="border border-line px-3 py-2" defaultValue={prs[0]?.id}>
             {prs.map((pr) => (
               <option key={pr.id} value={pr.id}>{pr.fullName}</option>
             ))}
           </select>
         )}
         {showPr && !collabName && (
-          <select name="side" className="border border-line px-3 py-2" value={side} onChange={(event) => setSide(event.target.value)}>
+          <select name="side" aria-label="Side" className="border border-line px-3 py-2" value={side} onChange={(event) => setSide(event.target.value)}>
             <option value="rvt">RVT</option>
             <option value="collab">Collab promoter</option>
           </select>
         )}
         {!collabName && side === "collab" && <input name="promoterName" placeholder="Their promoter" className="border border-line px-3 py-2" />}
-        {!collabName && <select name="collectedBy" className="border border-line px-3 py-2" defaultValue="pr">
+        {!collabName && <select name="collectedBy" aria-label="Who collected" className="border border-line px-3 py-2" defaultValue="pr">
           <option value="pr">PR collected</option>
           <option value="company">Company collected</option>
           <option value="ticketing_partner">Ticketing partner collected</option>
@@ -89,8 +94,9 @@ export function GuestForm({ eventId, tickets, prs, showPr, collabName }: { event
           <input name="proof" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="mt-1 block w-full" />
         </label>
       </div>
-      {error && <p className="text-sm text-danger">{error}</p>}
-      <button type="submit" className="bg-ink px-4 py-2 text-paper">Save to pending</button>
+      {saved && <p role="status" className="text-sm">Saved. The guest is on the list.</p>}
+      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+      <button type="submit" disabled={busy} className="bg-ink px-4 text-paper disabled:opacity-60">{busy ? "Saving…" : "Save to pending"}</button>
     </form>
   );
 }
@@ -127,8 +133,8 @@ export function CompForm({ eventId, tickets, prs, showPr }: { eventId: string; t
       <div className="grid gap-3 md:grid-cols-2">
         <input name="guestName" required placeholder="Name" className="border border-line px-3 py-2" />
         <input name="phone" required placeholder="Phone" className="border border-line px-3 py-2" />
-        <select name="ticketTypeId" className="border border-line px-3 py-2">{tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.name}</option>)}</select>
-        {showPr && <select name="prId" className="border border-line px-3 py-2">{prs.map((pr) => <option key={pr.id} value={pr.id}>{pr.fullName}</option>)}</select>}
+        <select name="ticketTypeId" aria-label="Ticket" className="border border-line px-3 py-2">{tickets.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.name}</option>)}</select>
+        {showPr && <select name="prId" aria-label="PR" className="border border-line px-3 py-2">{prs.map((pr) => <option key={pr.id} value={pr.id}>{pr.fullName}</option>)}</select>}
         <input name="notes" placeholder="Why" className="border border-line px-3 py-2 md:col-span-2" />
         <label className="flex items-center gap-2 text-sm md:col-span-2">
           <input name="age" type="checkbox" required />
@@ -378,7 +384,7 @@ export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partne
       {collab && (
         <div className="grid gap-3 md:grid-cols-3">
           <input name="brand" placeholder="Their brand" className="border border-line px-3 py-2" />
-          <select name="partner" className="border border-line px-3 py-2">
+          <select name="partner" aria-label="Collab partner" className="border border-line px-3 py-2">
             <option value="">Partner login</option>
             {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.fullName}</option>)}
           </select>
@@ -445,7 +451,7 @@ export function PeopleForms({ people }: { people: { id: string; fullName: string
         <input name="email" required type="email" placeholder="Email" className="border border-line px-3 py-2" />
         <input name="phone" required placeholder="Phone" className="border border-line px-3 py-2" />
         <input name="password" required type="password" minLength={8} placeholder="Password" className="border border-line px-3 py-2" />
-        <select name="role" className="border border-line px-3 py-2"><option value="door">Door</option><option value="data_entry">Data entry</option></select>
+        <select name="role" aria-label="Role" className="border border-line px-3 py-2"><option value="door">Door</option><option value="data_entry">Data entry</option></select>
         <button type="submit" className="bg-ink px-4 py-2 text-paper">Create login</button>
         {error && <p className="text-sm text-danger md:col-span-2">{error}</p>}
       </form>

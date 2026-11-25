@@ -44,7 +44,7 @@ export default async function GuestsPage() {
           <tbody>
             {list.sales.map((sale) => (
               <tr key={sale.id} className="border-b border-line">
-                <td className="px-3 py-3">{sale.guestName}</td>
+                <td className="max-w-[12rem] break-words px-3 py-3">{sale.guestName}</td>
                 <td className="px-3 py-3">{sale.phoneLast4}</td>
                 <td className="px-3 py-3">{sale.ticketTypeName}</td>
                 <td className="px-3 py-3">{actor.role === "collab_partner" ? sale.promoterName || "—" : sale.prName || sale.promoterName || "—"}</td>

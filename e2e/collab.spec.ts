@@ -14,6 +14,10 @@ async function login(page: Page, email: string) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
+test.beforeEach(({}, info) => {
+  test.skip(info.project.name !== "chromium-desktop", "the acceptance suite covers the other browsers");
+});
+
 test("collab partner logs their guest and cannot touch an RVT sale", async ({ page }) => {
   await login(page, "northline@rvt.demo");
   await page.goto("/guests");

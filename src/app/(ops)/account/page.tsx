@@ -7,7 +7,7 @@ export default async function AccountPage() {
   return (
     <div className="grid gap-2">
       <h1 className="display text-4xl">{actor.fullName}</h1>
-      <p>{actor.email}</p>
+      <p><a className="underline" href={`mailto:${actor.email}`}>{actor.email}</a></p>
       <p className="text-sm uppercase tracking-wider text-muted">{actor.role}</p>
     </div>
   );

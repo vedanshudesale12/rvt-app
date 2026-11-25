@@ -11,6 +11,7 @@ const PUBLIC = [
   "/privacy",
   "/terms",
   "/cookies",
+  "/contact",
   "/manifest.webmanifest",
   "/sw.js",
   "/api/health",
@@ -21,6 +22,18 @@ const PUBLIC = [
 
 function isPublic(path: string): boolean {
   return PUBLIC.some((item) => path === item) || path.startsWith("/brand/") || path.startsWith("/icons/");
+}
+
+const APP_PREFIXES = [
+  "/login", "/signup", "/privacy", "/terms", "/cookies", "/contact",
+  "/dashboard", "/guests", "/comps", "/ledger", "/settle", "/door", "/chat",
+  "/leaderboard", "/events", "/ticketing", "/data", "/people", "/audit",
+  "/account", "/pending", "/api", "/brand", "/icons", "/manifest.webmanifest", "/sw.js",
+];
+
+function isKnown(path: string): boolean {
+  if (path === "/") return true;
+  return APP_PREFIXES.some((item) => path === item || path.startsWith(`${item}/`));
 }
 
 function secureResponse(response: NextResponse, csp: string): NextResponse {
@@ -100,6 +113,8 @@ export async function proxy(request: NextRequest) {
     redirect.cookies.delete("rvt_seen");
     return secureResponse(redirect, csp);
   }
+
+  if (!isKnown(path)) return secureResponse(response, csp);
 
   if (!userId || !role || status === "disabled") {
     if (path.startsWith("/api/")) return secureResponse(NextResponse.json({ error: "Sign in required" }, { status: 401 }), csp);

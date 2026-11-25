@@ -19,6 +19,10 @@ async function login(page: Page, email: string) {
   await page.waitForURL((url) => !url.pathname.startsWith("/login"));
 }
 
+test.beforeEach(({}, info) => {
+  test.skip(info.project.name !== "chromium-desktop", "the acceptance suite covers the other browsers");
+});
+
 test("admin can browse data and other roles get 403", async ({ page }) => {
   await login(page, "vedanshu@rvt.demo");
   await page.goto("/data");

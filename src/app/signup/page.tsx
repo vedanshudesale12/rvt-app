@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { APP } from "@/config/brand";
+import { SiteFooter } from "@/components/footer";
 import { Logo } from "@/components/logo";
 import { api } from "@/components/use-api";
 
@@ -55,7 +56,7 @@ export default function SignupPage() {
           }
         }}
       >
-        <Logo lockup className="mb-2 h-auto w-56" />
+        <Logo lockup href="/login" className="mb-2 h-auto w-56" />
         <h1 className="display text-4xl">Join {APP.name}</h1>
         <p className="text-sm text-muted">PRs are active straight away. Ticketing and collab partners wait for an admin. You must be 18+.</p>
         <input name="fullName" required placeholder="Name" className="border border-line bg-panel px-3 py-2" />
@@ -68,7 +69,7 @@ export default function SignupPage() {
         <input name="upi" placeholder="UPI ID" className="border border-line bg-panel px-3 py-2" />
         <input name="referrer" placeholder="Who referred you" className="border border-line bg-panel px-3 py-2" />
         <label className="text-sm">Photo<input name="photo" type="file" accept="image/jpeg,image/png,image/webp" className="mt-1 block w-full" /></label>
-        <select name="role" className="border border-line bg-panel px-3 py-2">
+        <select name="role" aria-label="Role" className="border border-line bg-panel px-3 py-2">
           <option value="pr">PR</option>
           <option value="ticketing_partner">Ticketing partner</option>
           <option value="collab_partner">Collab partner</option>
@@ -83,8 +84,9 @@ export default function SignupPage() {
         <div className="cf-turnstile" data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""} />
         {error && <p className="text-sm text-danger">{error}</p>}
         <button type="submit" className="bg-ink px-4 py-2 text-paper">Create login</button>
-        <Link href="/login" className="text-sm underline">I already have a login</Link>
+        <Link href="/login" className="inline-flex min-h-11 items-center text-sm underline">I already have a login</Link>
       </form>
+      <SiteFooter />
     </main>
   );
 }
