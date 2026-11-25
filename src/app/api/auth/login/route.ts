@@ -5,7 +5,7 @@ import { loginSchema } from "@/domain/schemas";
 import { toActor } from "@/server/actor";
 import { verifyPassword } from "@/server/crypto";
 import { assertCsrf, clientIp, handle, readJson } from "@/server/http";
-import { hitLimit } from "@/server/rate-limit";
+import { hitLimit, overLimit } from "@/server/rate-limit";
 import { cookieBase, sealSeen, sealSession } from "@/server/session";
 import { getStore } from "@/server/store";
 import { createUserClient, supabaseConfigured } from "@/server/supabase";
@@ -14,15 +14,21 @@ import { verifyTurnstile } from "@/server/turnstile";
 export async function POST(request: Request) {
   return handle(async () => {
     assertCsrf(request);
-    const loginCap = process.env.NODE_ENV === "production" ? 10 : 200;
-    await hitLimit(`login:${clientIp(request)}`, loginCap, 15 * 60 * 1000);
+    const loginCap = process.env.NODE_ENV === "production" ? 40 : 500;
+    await hitLimit(`login-ip:${clientIp(request)}`, loginCap, 15 * 60 * 1000);
     const input = loginSchema.parse(await readJson(request));
+    if (overLimit(`login-fail:${input.email.toLowerCase()}`, 8, 15 * 60 * 1000)) {
+      throw new AppError(429, "Too many tries. Wait a minute and try again.");
+    }
     await verifyTurnstile(input.turnstileToken, clientIp(request));
     const jar = await cookies();
     if (supabaseConfigured()) {
       const supabase = await createUserClient();
       const { error } = await supabase.auth.signInWithPassword({ email: input.email, password: input.password });
-      if (error) throw new AppError(401, "Email or password is wrong");
+      if (error) {
+        await hitLimit(`login-fail:${input.email.toLowerCase()}`, 8, 15 * 60 * 1000);
+        throw new AppError(401, "Email or password is wrong");
+      }
       const { data } = await supabase.auth.getUser();
       const store = await getStore();
       const profile = (await store.profiles()).find((row) => row.id === data.user?.id);
@@ -37,6 +43,7 @@ export async function POST(request: Request) {
     const user = await store.userByEmail(input.email);
     const actor = user ? toActor(user.profile) : null;
     if (!user || !actor || !(await verifyPassword(input.password, user.passwordHash))) {
+      await hitLimit(`login-fail:${input.email.toLowerCase()}`, 8, 15 * 60 * 1000);
       throw new AppError(401, "Email or password is wrong");
     }
     jar.set("rvt_demo", await sealSession(actor.id), { ...cookieBase(), maxAge: 60 * 60 * 12 });

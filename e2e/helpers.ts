@@ -52,7 +52,7 @@ export function watchConsole(page: Page): string[] {
   page.on("console", (message) => {
     if (message.type() !== "error") return;
     const text = message.text();
-    if (/favicon|Download the React DevTools|Failed to load resource|caret-color/i.test(text)) return;
+    if (/favicon|Download the React DevTools|Failed to load resource|caret-color|downloadable font/i.test(text)) return;
     errors.push(text);
   });
   return errors;

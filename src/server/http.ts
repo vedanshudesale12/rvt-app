@@ -1,3 +1,4 @@
+import { ZodError } from "zod";
 import { AppError } from "@/domain/errors";
 import { safeEqual } from "@/server/bytes";
 import { cookieBase, csrfToken } from "@/server/session";
@@ -70,6 +71,7 @@ export async function handle(work: () => Promise<unknown>): Promise<Response> {
     return json(data ?? { ok: true });
   } catch (error) {
     if (error instanceof AppError) return json({ error: error.message }, error.status);
+    if (error instanceof ZodError) return json({ error: "Check the form and try again." }, 400);
     if (error instanceof Error && /phone|ticket|amount|file|form|email|password/i.test(error.message)) {
       return json({ error: error.message }, 400);
     }

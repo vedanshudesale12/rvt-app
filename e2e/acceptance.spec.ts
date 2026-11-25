@@ -58,7 +58,10 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
   await login(page, "vedanshu@rvt.demo");
   await page.goto("/guests");
   const select = page.locator("header select");
-  if (await select.count()) await select.selectOption({ label: "Warehouse Friday · 2026-11-28" });
+  if (await select.count()) {
+    await select.selectOption({ label: "Warehouse Friday · 2026-11-28" });
+    await expect(page.getByRole("heading", { name: "Warehouse Friday" })).toBeVisible();
+  }
   const guestForm = page.locator("form").filter({ hasText: "Add a guest" });
   await guestForm.getByPlaceholder("Name").fill(guestName);
   await guestForm.getByPlaceholder("Phone").fill(`9${stamp.replace(/\D/g, "").padEnd(9, "1").slice(0, 9)}`);
@@ -105,7 +108,7 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
   await page.goto("/ledger");
   await expect(page.getByText("DJ and sound hire")).toBeVisible();
   await page.goto("/settle");
-  await expect(page.getByText("Who owes what")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Who owes what")).toBeVisible();
   await page.goto("/leaderboard");
   await expect(page.getByText("Aisha Kulkarni")).toBeVisible();
   await page.goto("/chat");
@@ -126,18 +129,20 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
   await expect(page.getByText("Kabir Shah")).toHaveCount(0);
 });
 
-test("localhost and the LAN address both log in", async ({ page }, info) => {
+test("localhost and the LAN address both log in every role", async ({ page }, info) => {
   test.skip(info.project.name.includes("mobile"), "desktop browsers cover the two origins");
   for (const origin of ["http://127.0.0.1:3000", "http://192.168.1.5:3000"]) {
-    await page.goto(`${origin}/login`);
-    await dismissBanner(page);
-    await page.getByPlaceholder("Email").fill("vedanshu@rvt.demo");
-    await page.getByPlaceholder("Password").fill("demo-pass-123");
-    await page.getByRole("button", { name: "Log in" }).click();
-    await page.waitForURL(/\/dashboard/);
-    await expect(page.getByText("Live profit")).toBeVisible();
     const host = origin.includes("192.168") ? "lan" : "localhost";
-    await shot(page, `${info.project.name}-${host}-dashboard`);
-    await page.context().clearCookies();
+    for (const role of roles) {
+      await page.goto(`${origin}/login`);
+      await dismissBanner(page);
+      await page.getByPlaceholder("Email").fill(role.email);
+      await page.getByPlaceholder("Password").fill("demo-pass-123");
+      await page.getByRole("button", { name: "Log in" }).click();
+      await page.waitForURL(new RegExp(role.home));
+      await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+      await shot(page, `${info.project.name}-${host}-${role.key}`);
+      await logout(page);
+    }
   }
 });

@@ -5,6 +5,12 @@ export function resetRateLimits(): void {
   buckets.clear();
 }
 
+export function overLimit(bucket: string, limit: number, windowMs: number): boolean {
+  const current = buckets.get(bucket);
+  if (!current || Date.now() - current.start >= windowMs) return false;
+  return current.hits >= limit;
+}
+
 export function memoryHit(bucket: string, limit: number, windowMs: number): boolean {
   const now = Date.now();
   const current = buckets.get(bucket);

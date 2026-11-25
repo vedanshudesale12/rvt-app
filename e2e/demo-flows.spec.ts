@@ -125,7 +125,7 @@ test.describe.serial("demo flows", () => {
     await expect(page.getByText("DJ and sound hire")).toBeVisible();
     await shot(page, "08-admin-ledger");
     await page.goto("/settle");
-    await expect(page.getByText("Who owes what")).toBeVisible();
+    await expect(page.getByRole("main").getByText("Who owes what")).toBeVisible();
     await shot(page, "09-settle");
     await page.goto("/leaderboard");
     await expect(page.getByRole("heading", { name: "PR board" })).toBeVisible();
@@ -140,7 +140,7 @@ test.describe.serial("demo flows", () => {
     await page.locator("input[name=female]").fill("1000");
     await page.locator("input[name=commission]").fill("200");
     await page.getByRole("button", { name: "Publish and tell the PRs" }).click();
-    await expect(page.getByText("Play Night")).toBeVisible();
+    await expect(page.getByRole("link", { name: /Play Night/ })).toBeVisible();
     await shot(page, "11-event-created");
     await logout(page);
     await shot(page, "12-logged-out");
