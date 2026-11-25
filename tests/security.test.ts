@@ -159,6 +159,13 @@ describe("chat and validation", () => {
     if (preview.type === "preview") expect(preview.rows).toHaveLength(2);
     const tickets = demoTickets().filter((ticket) => ticket.eventId === ids.eventFriday);
     expect(parseGuestList("Aman Joshi, 9988776655, Male", tickets).rows[0].ticketTypeId).toBe(ids.ttMale);
+    const slash = parseGuestList("test one / 45823983498 / pr me", tickets);
+    expect(slash.errors).toEqual([]);
+    expect(slash.rows[0]?.guestName).toBe("test one");
+    expect(slash.rows[0]?.phone.replace(/\D/g, "")).toContain("45823983498");
+    const glued = parseGuestList("test one 45823983498pr me", tickets);
+    expect(glued.errors).toEqual([]);
+    expect(glued.rows[0]?.guestName).toBe("test one");
   });
 
   it("rejects tampered money, role, and status fields", () => {

@@ -27,6 +27,33 @@ export default async function DashboardPage() {
           RVT team · <span className="num">{view.rvtTeam.tickets}</span> verified · {inr(view.rvtTeam.amountPaise)}
         </p>
       )}
+      {view.byOrganizer && view.byOrganizer.length > 0 && (
+        <section className="border border-line bg-panel p-4">
+          <h2 className="display mb-4 text-2xl">By organizer / Collab</h2>
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wider text-muted">
+                <th className="py-2 pr-3 font-medium">Organizer</th>
+                <th className="py-2 pr-3 font-medium">Guests</th>
+                <th className="py-2 pr-3 font-medium">Verified</th>
+                <th className="py-2 pr-3 font-medium">Ticket money</th>
+                <th className="py-2 font-medium">Split</th>
+              </tr>
+            </thead>
+            <tbody>
+              {view.byOrganizer.map((row) => (
+                <tr key={row.label} className="border-t border-line">
+                  <td className="py-3 pr-3">{row.label}</td>
+                  <td className="num py-3 pr-3">{row.guests}</td>
+                  <td className="num py-3 pr-3">{row.verified}</td>
+                  <td className="num py-3 pr-3">{inr(row.ticketPaise)}</td>
+                  <td className="num py-3">{inr(row.splitPaise)}{row.splitNote ? ` · ${row.splitNote}` : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
       <section className="border border-line bg-panel p-4">
         <h2 className="display mb-4 text-2xl">Sales</h2>
         <Trend points={view.salesOverTime} />

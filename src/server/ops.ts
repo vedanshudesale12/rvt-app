@@ -70,7 +70,7 @@ function lock<T>(key: string, work: () => Promise<T>): Promise<T> {
 export async function eventsFor(actor: Actor, store: Store): Promise<EventRow[]> {
   const data = await books(store);
   return data.events
-    .filter((event) => canReadEvent(actor, event, data.assignments))
+    .filter((event) => !event.deletedAt && canReadEvent(actor, event, data.assignments))
     .sort((a, b) => b.eventDate.localeCompare(a.eventDate));
 }
 
@@ -500,6 +500,7 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
   const data = await books(store);
   const existing = input.id ? data.events.find((event) => event.id === input.id) : undefined;
   if (input.id && !existing) throw new NotFound();
+  if (existing?.deletedAt) throw new NotFound();
   const collabPartners = input.collabPartners ?? (input.isCollab && input.collabPartnerId
     ? [{ id: input.collabPartnerId, brand: input.collabBrand ?? "", splitPercent: input.collabSplitPercent }]
     : []);
@@ -525,7 +526,7 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
     })),
     settledAt: input.status === "settled" ? existing?.settledAt ?? new Date().toISOString() : null,
     createdBy: existing?.createdBy ?? actor.id,
-    deletedAt: null,
+    deletedAt: existing?.deletedAt ?? null,
     kind: (input.kind as EventRow["kind"]) || existing?.kind || "club_night",
     capacity: input.capacity ?? null,
     minAge: 18,
@@ -575,6 +576,17 @@ export async function saveEvent(actor: Actor, input: EventInput, store: Store) {
   if (publishing) await notifyPrs(actor, store, event, data.profiles);
   await audit(store, actor, existing ? "update_event" : "create_event", "events", event.id, { name: event.name, status: event.status });
   return event;
+}
+
+export async function deleteEvent(actor: Actor, eventId: string, store: Store) {
+  if (actor.role !== "admin") throw new Forbidden("Admin only");
+  const data = await books(store);
+  const event = data.events.find((row) => row.id === eventId && !row.deletedAt);
+  if (!event) throw new NotFound();
+  event.deletedAt = new Date().toISOString();
+  await store.saveEvent(event);
+  await audit(store, actor, "delete_event", "events", event.id, { name: event.name });
+  return { ok: true, id: event.id };
 }
 
 async function notifyPrs(actor: Actor, store: Store, event: EventRow, profiles: Profile[]) {
@@ -698,7 +710,7 @@ export async function compare(actor: Actor, store: Store, aId: string, bId: stri
 function looksLikeList(message: string): boolean {
   const lines = message.split(/\n/).filter((line) => line.trim());
   const phones = message.match(/\d[\d\s-]{7,}/g)?.length ?? 0;
-  return phones >= 1 && (lines.length >= 2 || message.includes(","));
+  return phones >= 1 && (lines.length >= 2 || /[,|\/;]/.test(message) || /[A-Za-z].*\d{8,}|\d{8,}.*[A-Za-z]/.test(message));
 }
 
 export async function chat(actor: Actor, store: Store, eventId: string | null, message: string) {

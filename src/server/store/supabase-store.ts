@@ -114,7 +114,7 @@ export function createSupabaseStore(): Store {
     },
     async events() {
       const supabase = await createUserClient();
-      const { data, error } = await supabase.from("events").select("*");
+      const { data, error } = await supabase.from("events").select("*").is("deleted_at", null);
       fail(error);
       return (data ?? []).map((row) => mapEvent(row as Row));
     },

@@ -3,7 +3,10 @@ import { Forbidden } from "@/domain/errors";
 import type { Settlement } from "@/domain/settlement";
 import type { Actor, EventRow, Expense, Profile, Sale, TicketType } from "@/domain/types";
 
-type Books = Pick<Settlement, "profitPaise" | "ticketRevenuePaise" | "expensesPaise"> | null;
+type Books = (Pick<Settlement, "profitPaise" | "ticketRevenuePaise" | "expensesPaise"> & {
+  rvtSharePaise?: number;
+  collabLines?: Settlement["collabLines"];
+}) | null;
 
 export type PublicSale = {
   id: string;
@@ -93,6 +96,7 @@ export type DashboardView = {
   byPr: { name: string; count: number; amountPaise?: number }[];
   revenueVsExpenses?: { revenuePaise: number; expensesPaise: number };
   rvtTeam?: RvtTeam;
+  byOrganizer?: { label: string; guests: number; verified: number; ticketPaise: number; splitPaise?: number; splitNote?: string }[];
 };
 
 export function presentDashboard(
@@ -191,7 +195,53 @@ export function presentDashboard(
         ? { revenuePaise: ticketRevenue, expensesPaise: books?.expensesPaise ?? expenseTotal }
         : undefined,
     rvtTeam: team ?? undefined,
+    byOrganizer: actor.role === "admin" && event.isCollab ? byOrganizerRows(event, visible, books) : undefined,
   };
+}
+
+function byOrganizerRows(event: EventRow, visible: Sale[], books: Books): NonNullable<DashboardView["byOrganizer"]> {
+  const paid = (row: Sale) => row.status === "verified" && !row.isComp;
+  const summarize = (rows: Sale[]) => ({
+    guests: rows.length,
+    verified: rows.filter(paid).length,
+    ticketPaise: rows.filter(paid).reduce((sum, row) => sum + row.amountPaise, 0),
+  });
+  const rvt = visible.filter((row) => row.side === "rvt");
+  const result: NonNullable<DashboardView["byOrganizer"]> = [{
+    label: "RVT",
+    ...summarize(rvt),
+    splitPaise: books?.rvtSharePaise,
+    splitNote: "after collab share",
+  }];
+  const shares =
+    event.collabShares && event.collabShares.length > 0
+      ? event.collabShares
+      : [{ brand: event.collabBrand || "Collab", partnerId: event.collabPartnerId, splitBps: event.collabSplitBps }];
+  const collabSales = visible.filter((row) => row.side === "collab");
+  const assigned = new Set<string>();
+  for (const share of shares) {
+    const rows = share.partnerId
+      ? collabSales.filter((row) => row.collabPartnerId === share.partnerId)
+      : [];
+    rows.forEach((row) => assigned.add(row.id));
+    const line = books?.collabLines?.find((item) => item.brand === share.brand);
+    result.push({
+      label: share.brand || "Collab",
+      ...summarize(rows),
+      splitPaise: line?.sharePaise,
+      splitNote: `${share.splitBps / 100}% of profit`,
+    });
+  }
+  const leftover = collabSales.filter((row) => !assigned.has(row.id));
+  if (leftover.length && result.length > 1) {
+    const first = result[1];
+    first.guests += leftover.length;
+    first.verified += leftover.filter(paid).length;
+    first.ticketPaise += leftover.filter(paid).reduce((sum, row) => sum + row.amountPaise, 0);
+  } else if (leftover.length) {
+    result.push({ label: event.collabBrand || "Collab", ...summarize(leftover), splitPaise: books?.collabLines?.[0]?.sharePaise });
+  }
+  return result;
 }
 
 export function presentLedger(actor: Actor, expenses: Expense[], settlement: Settlement | null) {

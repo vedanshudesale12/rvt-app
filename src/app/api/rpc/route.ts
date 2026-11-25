@@ -19,6 +19,7 @@ import { hitLimit } from "@/server/rate-limit";
 import {
   addExpense,
   chat,
+  deleteEvent,
   checkIn,
   createStaff,
   logBulk,
@@ -72,6 +73,8 @@ export async function POST(request: Request) {
         return voidExpense(actor, z.object({ id: z.uuid() }).parse(payload).id, store);
       case "saveEvent":
         return saveEvent(actor, eventSchema.parse(payload), store);
+      case "deleteEvent":
+        return deleteEvent(actor, z.object({ eventId: z.uuid() }).strict().parse(payload).eventId, store);
       case "settle":
         return settleEvent(actor, store, z.object({ eventId: z.uuid() }).parse(payload).eventId);
       case "createStaff":

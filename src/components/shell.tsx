@@ -9,7 +9,7 @@ import { SiteFooter } from "@/components/footer";
 import { api } from "@/components/use-api";
 import type { NavItem } from "@/domain/paths";
 
-type EventOption = { id: string; name: string; date: string };
+type EventOption = { id: string; name: string; date: string; collab?: string };
 type Note = { id: string; title: string; body: string };
 
 export function Shell({
@@ -123,7 +123,7 @@ export function Shell({
               >
                 {events.map((event) => (
                   <option key={event.id} value={event.id}>
-                    {event.name} · {event.date}
+                    {event.name} · {event.date}{event.collab ? ` · ${event.collab}` : ""}
                   </option>
                 ))}
               </select>

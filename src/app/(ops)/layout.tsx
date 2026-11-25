@@ -24,7 +24,7 @@ export default async function OpsLayout({ children }: { children: React.ReactNod
       name={actor.fullName}
       roleLabel={labels[actor.role] ?? actor.role}
       nav={navFor(actor.role)}
-      events={events.map((row) => ({ id: row.id, name: row.name, date: row.eventDate }))}
+      events={events.map((row) => ({ id: row.id, name: row.name, date: row.eventDate, collab: row.isCollab ? (row.collabBrand || "Collab") : undefined }))}
       eventId={event?.id ?? null}
       notices={unread.map((row) => ({ id: row.id, title: row.title, body: row.body }))}
     >

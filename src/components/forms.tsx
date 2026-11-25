@@ -191,14 +191,15 @@ export function ChatPanel({ eventId }: { eventId: string | null }) {
         className="grid gap-3"
         onSubmit={async (event) => {
           event.preventDefault();
-          const form = new FormData(event.currentTarget);
+          const formEl = event.currentTarget;
+          const form = new FormData(formEl);
           const message = String(form.get("message") || "");
           setLines((current) => [...current, { who: "You", text: message }]);
           try {
             const result = await api("/api/rpc", { action: "chat", payload: { eventId, message } });
             if (result.type === "preview") setPreview(result.rows);
             else setLines((current) => [...current, { who: APP.shortName, text: result.text }]);
-            event.currentTarget.reset();
+            formEl.reset();
           } catch (err) {
             setError(err instanceof Error ? err.message : "Chat failed");
           }
@@ -316,26 +317,116 @@ export function DoorBoard({ eventId }: { eventId: string }) {
   );
 }
 
-export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partners: Pr[]; ticketing?: Pr[] }) {
+export function DeleteEventButton({ eventId, eventName }: { eventId: string; eventName: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const confirmed = typed === eventName || typed === "Delete";
+  if (!open) {
+    return (
+      <button type="button" className="border border-danger px-3 py-2 text-sm text-danger" onClick={() => setOpen(true)}>
+        Delete
+      </button>
+    );
+  }
+  return (
+    <div className="grid min-w-[16rem] gap-2 border border-danger bg-panel p-3 text-sm">
+      <p>This hides the event everywhere. Money and audit records stay. Type the event name or Delete to confirm.</p>
+      <input
+        value={typed}
+        onChange={(event) => setTyped(event.target.value)}
+        placeholder={eventName}
+        aria-label="Type the event name or Delete"
+        className="border border-line px-2 py-1"
+      />
+      {error && <p className="text-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" className="border border-ink px-3 py-1" onClick={() => { setOpen(false); setTyped(""); setError(""); }} disabled={busy}>Cancel</button>
+        <button
+          type="button"
+          disabled={!confirmed || busy}
+          className="bg-ink px-3 py-1 text-paper disabled:opacity-50"
+          onClick={async () => {
+            setBusy(true);
+            setError("");
+            try {
+              await api("/api/rpc", { action: "deleteEvent", payload: { eventId } });
+              setOpen(false);
+              router.refresh();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Could not delete");
+              setBusy(false);
+            }
+          }}
+        >
+          Delete event
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type EventFormValues = {
+  id?: string;
+  name: string;
+  eventDate: string;
+  time: string;
+  venue: string;
+  male: number;
+  female: number;
+  maleId?: string;
+  femaleId?: string;
+  commission: number;
+  bar: number;
+  barSplit: number;
+  barPartner: string;
+  isCollab: boolean;
+  prIds?: string[];
+  collabPartners: { id: string; brand: string; splitPercent: number }[];
+  ticketingPartners: { id: string; flatRupees: number; percent: number | null }[];
+};
+
+export function EventForm({ prs, partners, ticketing = [], event }: { prs: Pr[]; partners: Pr[]; ticketing?: Pr[]; event?: EventFormValues }) {
   const router = useRouter();
   const [error, setError] = useState("");
-  const [collab, setCollab] = useState(false);
+  const [collab, setCollab] = useState(Boolean(event?.isCollab));
+  const [collabRows, setCollabRows] = useState<{ id: string; brand: string; splitPercent: string }[]>(
+    event?.collabPartners.length
+      ? event.collabPartners.map((partner) => ({ id: partner.id, brand: partner.brand, splitPercent: String(partner.splitPercent) }))
+      : [{ id: "", brand: "", splitPercent: "" }],
+  );
+  const checkedTicketing = new Set(event?.ticketingPartners.map((partner) => partner.id) ?? []);
+  const ticketingById = new Map(event?.ticketingPartners.map((partner) => [partner.id, partner]) ?? []);
   return (
     <form
       className="grid gap-3"
-      onSubmit={async (event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
+      onSubmit={async (submitEvent) => {
+        submitEvent.preventDefault();
+        const form = new FormData(submitEvent.currentTarget);
         const prIds = prs.filter((pr) => form.get(`pr-${pr.id}`) === "on").map((pr) => pr.id);
         const ticketingPartners = ticketing.filter((partner) => form.get(`tp-${partner.id}`) === "on").map((partner) => ({
           id: partner.id,
           flatRupees: Number(form.get(`tp-flat-${partner.id}`) || 100),
           percent: form.get(`tp-pct-${partner.id}`) === "" ? null : Number(form.get(`tp-pct-${partner.id}`)),
         }));
+        const chosenCollabs = collab
+          ? collabRows.filter((row) => row.id).map((row) => ({
+              id: row.id,
+              brand: row.brand || partners.find((partner) => partner.id === row.id)?.fullName || "Collab",
+              splitPercent: Number(row.splitPercent || 0),
+            }))
+          : [];
+        if (collab && chosenCollabs.length === 0) {
+          setError("Pick at least one collab partner, or turn Collab event off.");
+          return;
+        }
         try {
           await api("/api/rpc", {
             action: "saveEvent",
             payload: {
+              id: event?.id,
               name: form.get("name"),
               eventDate: form.get("eventDate"),
               venue: form.get("venue"),
@@ -345,13 +436,14 @@ export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partne
               barRevenueRupees: Number(form.get("bar") || 0),
               barSplitPercent: Number(form.get("barSplit") || 0),
               barPartnerName: form.get("barPartner") || "",
-              isCollab: collab,
-              collabBrand: form.get("brand") || "",
-              collabPartnerId: form.get("partner") || null,
-              collabSplitPercent: Number(form.get("split") || 0),
+              isCollab: chosenCollabs.length > 0,
+              collabBrand: chosenCollabs[0]?.brand || "",
+              collabPartnerId: chosenCollabs[0]?.id ?? null,
+              collabSplitPercent: chosenCollabs[0]?.splitPercent ?? 0,
+              collabPartners: chosenCollabs,
               ticketTypes: [
-                { name: "Male", priceRupees: Number(form.get("male")) },
-                { name: "Female", priceRupees: Number(form.get("female")) },
+                { id: event?.maleId, name: "Male", priceRupees: Number(form.get("male")) },
+                { id: event?.femaleId, name: "Female", priceRupees: Number(form.get("female")) },
               ],
               prIds,
               ticketingPartners,
@@ -364,32 +456,57 @@ export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partne
         }
       }}
     >
-      <input name="name" required placeholder="Event name" className="border border-line px-3 py-2" />
+      <input name="name" required placeholder="Event name" defaultValue={event?.name} className="border border-line px-3 py-2" />
       <div className="grid gap-3 md:grid-cols-3">
-        <input name="eventDate" required type="date" className="border border-line px-3 py-2" />
-        <input name="time" required type="time" defaultValue="21:00" className="border border-line px-3 py-2" />
-        <input name="venue" required placeholder="Venue" className="border border-line px-3 py-2" />
+        <input name="eventDate" required type="date" defaultValue={event?.eventDate} className="border border-line px-3 py-2" />
+        <input name="time" required type="time" defaultValue={event?.time ?? "21:00"} className="border border-line px-3 py-2" />
+        <input name="venue" required placeholder="Venue" defaultValue={event?.venue} className="border border-line px-3 py-2" />
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <input name="male" required type="number" min="0" placeholder="Male price ₹" className="border border-line px-3 py-2" />
-        <input name="female" required type="number" min="0" placeholder="Female price ₹" className="border border-line px-3 py-2" />
-        <input name="commission" required type="number" min="0" placeholder="PR cut ₹ per ticket" className="border border-line px-3 py-2" />
+        <input name="male" required type="number" min="0" placeholder="Male price ₹" defaultValue={event?.male} className="border border-line px-3 py-2" />
+        <input name="female" required type="number" min="0" placeholder="Female price ₹" defaultValue={event?.female} className="border border-line px-3 py-2" />
+        <input name="commission" required type="number" min="0" placeholder="PR cut ₹ per ticket" defaultValue={event?.commission} className="border border-line px-3 py-2" />
       </div>
       <div className="grid gap-3 md:grid-cols-3">
-        <input name="bar" type="number" min="0" placeholder="Bar takings ₹" className="border border-line px-3 py-2" />
-        <input name="barSplit" type="number" min="0" max="100" placeholder="Bar share %" className="border border-line px-3 py-2" />
-        <input name="barPartner" placeholder="Bar partner" className="border border-line px-3 py-2" />
+        <input name="bar" type="number" min="0" placeholder="Bar takings ₹" defaultValue={event?.bar} className="border border-line px-3 py-2" />
+        <input name="barSplit" type="number" min="0" max="100" placeholder="Bar share %" defaultValue={event?.barSplit} className="border border-line px-3 py-2" />
+        <input name="barPartner" placeholder="Bar partner" defaultValue={event?.barPartner} className="border border-line px-3 py-2" />
       </div>
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={collab} onChange={(event) => setCollab(event.target.checked)} /> Collab event</label>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={collab} onChange={(change) => setCollab(change.target.checked)} /> Collab event</label>
       {collab && (
-        <div className="grid gap-3 md:grid-cols-3">
-          <input name="brand" placeholder="Their brand" className="border border-line px-3 py-2" />
-          <select name="partner" aria-label="Collab partner" className="border border-line px-3 py-2">
-            <option value="">Partner login</option>
-            {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.fullName}</option>)}
-          </select>
-          <input name="split" type="number" min="0" max="100" placeholder="Their profit %" className="border border-line px-3 py-2" />
-        </div>
+        <fieldset className="grid gap-3 border border-line p-3">
+          <legend className="px-1 text-sm">Collab partners</legend>
+          {partners.length === 0 && <p className="text-sm text-muted">No collab partner logins yet. Add one under People, or create their account first.</p>}
+          {collabRows.map((row, index) => (
+            <div key={`collab-${index}`} className="grid gap-3 md:grid-cols-3">
+              <select
+                aria-label={`Collab partner ${index + 1}`}
+                value={row.id}
+                className="border border-line px-3 py-2"
+                onChange={(change) => setCollabRows((current) => current.map((item, i) => i === index ? { ...item, id: change.target.value, brand: item.brand || (partners.find((partner) => partner.id === change.target.value)?.fullName ?? "") } : item))}
+              >
+                <option value="">Partner login</option>
+                {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.fullName}</option>)}
+              </select>
+              <input
+                placeholder="Their brand"
+                value={row.brand}
+                onChange={(change) => setCollabRows((current) => current.map((item, i) => i === index ? { ...item, brand: change.target.value } : item))}
+                className="border border-line px-3 py-2"
+              />
+              <input
+                type="number"
+                min="0"
+                max="100"
+                placeholder="Their profit %"
+                value={row.splitPercent}
+                onChange={(change) => setCollabRows((current) => current.map((item, i) => i === index ? { ...item, splitPercent: change.target.value } : item))}
+                className="border border-line px-3 py-2"
+              />
+            </div>
+          ))}
+          <button type="button" className="justify-self-start text-sm underline" onClick={() => setCollabRows((current) => [...current, { id: "", brand: "", splitPercent: "" }])}>Add another collab</button>
+        </fieldset>
       )}
       {ticketing.length > 0 && (
         <fieldset className="border border-line p-3">
@@ -397,9 +514,9 @@ export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partne
           <div className="grid gap-3">
             {ticketing.map((partner) => (
               <label key={partner.id} className="grid gap-2 text-sm md:grid-cols-[1fr_120px_120px] md:items-center">
-                <span className="flex items-center gap-2"><input type="checkbox" name={`tp-${partner.id}`} /> {partner.fullName}</span>
-                <input name={`tp-flat-${partner.id}`} type="number" min="0" defaultValue="100" className="border border-line px-2 py-1" aria-label={`${partner.fullName} rupees per guest`} />
-                <input name={`tp-pct-${partner.id}`} type="number" min="0" max="100" placeholder="Their %" className="border border-line px-2 py-1" aria-label={`${partner.fullName} percent`} />
+                <span className="flex items-center gap-2"><input type="checkbox" name={`tp-${partner.id}`} defaultChecked={checkedTicketing.has(partner.id)} /> {partner.fullName}</span>
+                <input name={`tp-flat-${partner.id}`} type="number" min="0" defaultValue={ticketingById.get(partner.id)?.flatRupees ?? 100} className="border border-line px-2 py-1" aria-label={`${partner.fullName} rupees per guest`} />
+                <input name={`tp-pct-${partner.id}`} type="number" min="0" max="100" placeholder="Their %" defaultValue={ticketingById.get(partner.id)?.percent ?? undefined} className="border border-line px-2 py-1" aria-label={`${partner.fullName} percent`} />
               </label>
             ))}
           </div>
@@ -410,12 +527,12 @@ export function EventForm({ prs, partners, ticketing = [] }: { prs: Pr[]; partne
         <legend className="px-1 text-sm">PRs on this event</legend>
         <div className="grid gap-2 md:grid-cols-2">
           {prs.map((pr) => (
-            <label key={pr.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name={`pr-${pr.id}`} defaultChecked /> {pr.fullName}</label>
+            <label key={pr.id} className="flex items-center gap-2 text-sm"><input type="checkbox" name={`pr-${pr.id}`} defaultChecked={event ? event.prIds?.includes(pr.id) : true} /> {pr.fullName}</label>
           ))}
         </div>
       </fieldset>
       {error && <p className="text-sm text-danger">{error}</p>}
-      <button type="submit" className="justify-self-start bg-ink px-4 py-2 text-paper">Publish and tell the PRs</button>
+      <button type="submit" className="justify-self-start bg-ink px-4 py-2 text-paper">{event?.id ? "Save event" : "Publish and tell the PRs"}</button>
     </form>
   );
 }

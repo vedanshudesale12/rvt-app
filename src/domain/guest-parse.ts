@@ -9,6 +9,19 @@ function matchTicket(label: string, tickets: TicketType[]): TicketType | undefin
   return tickets.find((ticket) => ticket.name.toLowerCase() === needle);
 }
 
+const PROMOTER_SELF = /^(pr\s*me|prme|me|myself|self)$/i;
+
+function partsFromLine(line: string): string[] {
+  const parts = line.split(/[,|/\t;]| - /).map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) return parts;
+  const found = line.match(/(\d[\d\s-]{7,}\d)/);
+  if (!found || found.index == null) return parts;
+  const phone = found[1];
+  const before = line.slice(0, found.index).trim();
+  const after = line.slice(found.index + phone.length).trim();
+  return [before, phone, after].map((part) => part.trim()).filter(Boolean);
+}
+
 export function parseGuestList(text: string, tickets: TicketType[]): { rows: ParsedGuest[]; errors: string[] } {
   const rows: ParsedGuest[] = [];
   const errors: string[] = [];
@@ -18,7 +31,7 @@ export function parseGuestList(text: string, tickets: TicketType[]): { rows: Par
     .filter(Boolean);
   lines.forEach((line, index) => {
     if (/^(name|guest)\b/i.test(line)) return;
-    const parts = line.split(/[,|;\t]| - /).map((part) => part.trim()).filter(Boolean);
+    const parts = partsFromLine(line);
     if (parts.length < 2) {
       errors.push(`Line ${index + 1} needs a name and a phone`);
       return;
@@ -28,7 +41,7 @@ export function parseGuestList(text: string, tickets: TicketType[]): { rows: Par
       errors.push(`Line ${index + 1} has no phone`);
       return;
     }
-    const rest = parts.filter((part) => part !== phonePart);
+    const rest = parts.filter((part) => part !== phonePart && !PROMOTER_SELF.test(part));
     const typePart = rest.find((part) => matchTicket(part, tickets));
     const namePart = rest.find((part) => part !== typePart) ?? rest[0];
     const ticket = typePart ? matchTicket(typePart, tickets) : tickets[0];
