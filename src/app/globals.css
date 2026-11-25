@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Archivo Narrow", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+  --color-ink: #141414;
+  --color-paper: #f3f3ef;
+  --color-panel: #ffffff;
+  --color-line: #d7d7d0;
+  --color-muted: #5e5e5e;
+  --color-invert: #0c0c0c;
+  --color-invert-muted: #bdbdbd;
+  --color-accent: #4b1494;
+  --color-danger: #8d1d1d;
+  --color-ok: #1c5c34;
+  --radius-sm: 2px;
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.num {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
