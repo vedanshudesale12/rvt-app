@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { axe, dismissBanner, login, logout, roles, shot, wantShots, watchConsole } from "./helpers";
+import { axe, dismissBanner, login, logout, roles, shot, submitAction, wantShots, watchConsole } from "./helpers";
 
 const consoleErrors = new WeakMap<import("@playwright/test").Page, string[]>();
 
@@ -69,7 +69,7 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
   await guestForm.getByRole("button", { name: "Save to pending" }).click();
   const guestRow = page.getByRole("row", { name: new RegExp(guestName) });
   await expect(guestRow).toContainText(/pending/i);
-  await guestRow.getByRole("button", { name: "Verify" }).click();
+  await submitAction(page, guestRow.getByRole("button", { name: "Verify" }));
   await expect(guestRow).toContainText(/verified/i);
   await logout(page);
 
@@ -88,7 +88,7 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
   await page.goto("/comps");
   if (await select.count()) await select.selectOption({ label: "Warehouse Friday · 2026-11-28" });
   const compRow = page.getByRole("listitem").filter({ hasText: compName });
-  await compRow.getByRole("button", { name: "Approve" }).click();
+  await submitAction(page, compRow.getByRole("button", { name: "Approve" }));
   await expect(compRow).toContainText(/approved/i);
   await logout(page);
 
@@ -131,7 +131,9 @@ test("guest, comp, door, ledger, and settle", async ({ page }, info) => {
 
 test("localhost and the LAN address both log in every role", async ({ page }, info) => {
   test.skip(info.project.name.includes("mobile"), "desktop browsers cover the two origins");
-  for (const origin of ["http://127.0.0.1:3000", "http://192.168.1.5:3000"]) {
+  // GitHub runners cannot reach the home LAN address, so CI checks localhost only.
+  const origins = process.env.CI ? ["http://127.0.0.1:3000"] : ["http://127.0.0.1:3000", "http://192.168.1.5:3000"];
+  for (const origin of origins) {
     const host = origin.includes("192.168") ? "lan" : "localhost";
     for (const role of roles) {
       await page.goto(`${origin}/login`);

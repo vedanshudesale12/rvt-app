@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdirSync } from "node:fs";
 
@@ -76,8 +76,14 @@ export async function login(page: Page, email: string) {
 }
 
 export async function logout(page: Page) {
-  await page.getByRole("button", { name: "Log out" }).click();
-  await page.waitForURL(/\/login/, { waitUntil: "commit" });
+  await page.waitForLoadState("load");
+  // A click that lands before hydration does nothing, so retry until the redirect happens.
+  await expect(async () => {
+    if (!new URL(page.url()).pathname.startsWith("/login")) {
+      await page.getByRole("button", { name: "Log out" }).click({ timeout: 5_000 });
+    }
+    await page.waitForURL(/\/login/, { waitUntil: "commit", timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
 }
 
 export async function shot(page: Page, name: string) {
@@ -93,4 +99,18 @@ export async function axe(page: Page, label: string) {
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
   const serious = result.violations.filter((item) => item.impact === "serious" || item.impact === "critical");
   expect(serious, `${label}: ${serious.map((item) => item.id).join(", ")}`).toEqual([]);
+}
+
+/** Click an ActionButton and wait until its /api/rpc call succeeds (retries clicks that land before hydration). */
+export async function submitAction(page: Page, button: Locator) {
+  await page.waitForLoadState("load");
+  await expect(async () => {
+    const response = page.waitForResponse(
+      (res) => res.url().includes("/api/rpc") && res.request().method() === "POST",
+      { timeout: 15_000 },
+    );
+    await button.click({ timeout: 5_000 });
+    expect((await response).ok()).toBe(true);
+  }).toPass({ timeout: 60_000 });
+  await page.waitForLoadState("load");
 }
